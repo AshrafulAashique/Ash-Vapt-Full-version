@@ -516,16 +516,9 @@
       }
     }
 
-    function mask(str) {
-      if (!str || str === 'N/A' || str === '--') return str;
-      const s = String(str);
-      if (s.length <= 3) return '*'.repeat(s.length);
-      const hideLen = Math.ceil(s.length * 0.5);
-      const start = Math.floor((s.length - hideLen) / 2);
-      return s.substring(0, start) + '*'.repeat(hideLen) + s.substring(start + hideLen);
-    }
-
     function renderResults() {
+      const isLocal = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+      
       const c = G.severity_counts || {};
       document.getElementById('sc-critical').textContent = c.Critical || 0;
       document.getElementById('sc-high').textContent = c.High || 0;
@@ -555,9 +548,10 @@
         }
       });
 
+      // Show full unmasked IP info
       const ip = (G.intel?.ip_info || [])[0] || {};
       document.getElementById('ip-info-list').innerHTML = `
-        <div class="kv-row"><span class="kv-k">IP:</span><span class="kv-v">${mask(ip.query || ip.ip || 'N/A')}</span></div>
+        <div class="kv-row"><span class="kv-k">IP:</span><span class="kv-v">${ip.query || ip.ip || 'N/A'}</span></div>
         <div class="kv-row"><span class="kv-k">Country:</span><span class="kv-v">${ip.country || 'N/A'}</span></div>
         <div class="kv-row"><span class="kv-k">ISP:</span><span class="kv-v">${ip.isp || 'N/A'}</span></div>
       `;
@@ -576,10 +570,11 @@
         <div class="kv-row"><span class="kv-k">Days Left:</span><span class="kv-v">${ssl.days_until_expiry ?? 'N/A'}</span></div>
       `;
 
+      // Show full unmasked Ports
       const ports = G.intel?.ports || [];
       document.getElementById('ports-count').textContent = ports.length;
       document.getElementById('port-grid').innerHTML = ports.length
-        ? ports.map(p => `<span class="badge badge-low" style="margin:2px;">${mask(p.port)}: ${p.service}</span>`).join(' ')
+        ? ports.map(p => `<span class="badge badge-low" style="margin:2px;">${p.port}: ${p.service}</span>`).join(' ')
         : 'No open ports detected.';
 
       const tech = G.intel?.technologies || {};
@@ -590,14 +585,30 @@
       const findings = G.findings || [];
       document.getElementById('findings-count').textContent = findings.length;
       const tbody = document.getElementById('findings-tbody');
-      tbody.innerHTML = findings.length ? findings.map(f => `
+      
+      // Inject notice and unmask findings details
+      let resultsHtml = "";
+      if (!isLocal) {
+          resultsHtml += `
+            <tr>
+              <td colspan="4" style="text-align: center; background-color: #ffe6e6; color: #cc0000; font-weight: bold; padding: 15px;">
+                DEMO PREVIEW: Some advanced reporting details and exports have been omitted. <br> 
+                Contact owner (ashrafulaashique.in) for the full version, detailed vulnerability exploitation paths, and PDF reports.
+              </td>
+            </tr>
+          `;
+      }
+      
+      resultsHtml += findings.length ? findings.map(f => `
         <tr>
           <td>${f.id}</td>
-          <td><strong>${f.name}</strong></td>
+          <td><strong>${f.name}</strong><br><small style="color: #666; font-size: 0.85em;">${f.description || 'N/A'}</small></td>
           <td><span class="badge badge-${(f.severity||'info').toLowerCase()}">${f.severity}</span></td>
           <td>${f.owasp_id} - ${f.owasp_name}</td>
         </tr>
       `).join('') : '<tr><td colspan="4">No vulnerabilities detected.</td></tr>';
+      
+      tbody.innerHTML = resultsHtml;
     }
   </script>
 </body>
