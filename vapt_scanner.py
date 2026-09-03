@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║          VAPT ANALYTICAL PLATFORM  — Advanced Edition v2.0                  ║
+║         Ash's VAPT & OSINT Tool  —  Advanced Edition v3.0                   ║
 ║  Vulnerability Assessment + Penetration Testing + OSINT Intelligence        ║
 ║                                                                              ║
 ║  Inspired by: Vulners, Shodan-style recon, Spiderfoot, SpyFu, Censys,       ║
@@ -13,14 +13,20 @@ Usage:
     python vapt_scanner.py https://example.com
 
 Install dependencies:
-    pip install requests beautifulsoup4 dnspython matplotlib python-docx
-                Pillow tqdm colorama pyOpenSSL cryptography python-whois
+    pip install requests beautifulsoup4 dnspython tqdm colorama pyOpenSSL cryptography python-whois flask
 """
 
 import sys, os, re, ssl, json, socket, hashlib, datetime, urllib.parse
-import ipaddress, time, threading, warnings, struct, base64
+import ipaddress, time, threading, warnings, struct, base64, webbrowser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 warnings.filterwarnings("ignore")
+
+# Force UTF-8 output on Windows to handle box-drawing / emoji characters
+if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 
 # ── Third-party ───────────────────────────────────────────────────────────────
 try:
@@ -29,26 +35,13 @@ try:
     requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
     from bs4 import BeautifulSoup
     import dns.resolver, dns.reversename, dns.zone, dns.query
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    import matplotlib.ticker as ticker
-    import numpy as np
-    from docx import Document
-    from docx.shared import Pt, RGBColor, Inches, Cm
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.enum.table import WD_TABLE_ALIGNMENT
-    from docx.oxml.ns import qn
-    from docx.oxml import OxmlElement
     from tqdm import tqdm
     from colorama import Fore, Style, init as colorama_init
     colorama_init(autoreset=True)
-    from PIL import Image
     import OpenSSL.crypto as crypto
 except ImportError as e:
     print(f"\n[!] Missing dependency: {e}")
-    print("    pip install requests beautifulsoup4 dnspython matplotlib "
-          "python-docx Pillow tqdm colorama pyOpenSSL cryptography")
+    print("    pip install requests beautifulsoup4 dnspython tqdm colorama pyOpenSSL cryptography flask")
     sys.exit(1)
 
 try:
@@ -57,14 +50,30 @@ try:
 except ImportError:
     WHOIS_AVAILABLE = False
 
+try:
+    from flask import Flask, jsonify, send_from_directory, request as flask_request
+    FLASK_AVAILABLE = True
+except ImportError:
+    FLASK_AVAILABLE = False
+
+# ── Global scan state (shared between scanner thread & Flask) ─────────────────
+SCAN_STATE = {
+    "status":   "idle",      # idle | scanning | done | error
+    "target":   "",
+    "step":     "",
+    "progress": 0,           # 0-100
+    "total":    0,
+    "current":  0,
+    "results_path": None,
+    "error":    "",
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  CONSTANTS & MAPPINGS
 # ─────────────────────────────────────────────────────────────────────────────
 
 SEVERITY_ORDER  = ["Critical", "High", "Medium", "Low", "Info"]
 SEVERITY_COLORS = {"Critical":"#C00000","High":"#FF4500","Medium":"#FFA500","Low":"#FFD700","Info":"#00BFFF"}
-SEVERITY_FILL   = {"Critical":"C00000","High":"FF4500","Medium":"FFA500","Low":"FFD700","Info":"00BFFF"}
-SEVERITY_TEXT   = {"Critical":"FFFFFF","High":"FFFFFF","Medium":"000000","Low":"000000","Info":"000000"}
 
 OWASP_MAP = {
     "Missing X-Frame-Options":           ("A05","Security Misconfiguration"),
@@ -177,17 +186,18 @@ SESSION.verify = False
 # ─────────────────────────────────────────────────────────────────────────────
 
 def banner():
-    print(Fore.CYAN + """
-╔══════════════════════════════════════════════════════════════════════╗
-║  ██╗   ██╗ █████╗ ██████╗ ████████╗    ██████╗ ██████╗  ██████╗    ║
-║  ██║   ██║██╔══██╗██╔══██╗╚══██╔══╝    ██╔══██╗██╔══██╗██╔═══██╗   ║
-║  ██║   ██║███████║██████╔╝   ██║       ██████╔╝██████╔╝██║   ██║   ║
-║  ╚██╗ ██╔╝██╔══██║██╔═══╝    ██║       ██╔═══╝ ██╔══██╗██║   ██║   ║
-║   ╚████╔╝ ██║  ██║██║        ██║       ██║     ██║  ██║╚██████╔╝   ║
-║    ╚═══╝  ╚═╝  ╚═╝╚═╝        ╚═╝       ╚═╝     ╚═╝  ╚═╝ ╚═════╝    ║
-║                                                                      ║
-║    VAPT Analytical Platform v2.0  ·  Advanced OSINT + Security       ║
-╚══════════════════════════════════════════════════════════════════════╝""" + Style.RESET_ALL)
+    try:
+        print(Fore.RED + """
+  ___   ___ _  _ ___   __   __   _   ___ _____   ___  ___ ___ _  _ _____
+ / _ \\ / __| || |_ _| \\ \\ / /  /_\\ |_ _|_   _| / _ \\/ __|_ _| \\| |_   _|
+| (_) | (__| __ || |   \\ V /  / _ \\ | |  | |  | (_) \\__ \\| || .` | | |
+ \\___/ \\___|_||_|___|   \\_/  /_/ \\_\\___| |_|   \\___/|___/___|_|\\_| |_|
+
+  Ash's VAPT & OSINT Tool v3.0  --  Dashboard Edition
+  ====================================================
+""" + Style.RESET_ALL)
+    except Exception:
+        print("[*] Ash's VAPT & OSINT Tool v3.0")
 
 def normalise_url(url):
     if not url.startswith(("http://","https://")):
@@ -206,18 +216,6 @@ def safe_get(url, timeout=10, allow_redirects=True, headers=None):
     except Exception:
         return None
 
-def hex_rgb(h):
-    h = h.lstrip("#")
-    return tuple(int(h[i:i+2],16) for i in (0,2,4))
-
-def set_cell_bg(cell, hex_color):
-    tc = cell._tc
-    tcPr = tc.get_or_add_tcPr()
-    shd = OxmlElement("w:shd")
-    shd.set(qn("w:val"),"clear"); shd.set(qn("w:color"),"auto")
-    shd.set(qn("w:fill"), hex_color.lstrip("#"))
-    tcPr.append(shd)
-
 def ip_to_geo(ip):
     try:
         r = requests.get(f"http://ip-api.com/json/{ip}?fields=country,regionName,city,isp,org,as,query",
@@ -227,6 +225,31 @@ def ip_to_geo(ip):
     except Exception:
         pass
     return {}
+
+def calculate_security_score(findings):
+    score = 100
+    counts = {s: 0 for s in SEVERITY_ORDER}
+    for f in findings:
+        counts[f["severity"]] += 1
+
+    score -= min(counts["Critical"] * 20, 60)
+    score -= min(counts["High"]     * 10, 40)
+    score -= min(counts["Medium"]   *  5, 20)
+    score -= min(counts["Low"]      *  2, 10)
+    score = max(0, score)
+
+    if score >= 85:
+        grade, color = "A", "#00C853"
+    elif score >= 70:
+        grade, color = "B", "#00BCD4"
+    elif score >= 50:
+        grade, color = "C", "#FF9800"
+    elif score >= 25:
+        grade, color = "D", "#F44336"
+    else:
+        grade, color = "F", "#B71C1C"
+
+    return {"score": score, "grade": grade, "color": color}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -478,7 +501,10 @@ class VAPTScanner:
         for port in results:
             if port:
                 service = PORTS.get(port,"Unknown")
-                open_ports.append({"port":port,"service":service})
+                risk = "critical" if port in (23,445,2375,4848,7001,5900) else \
+                       "high" if port in (3389,6379,9200,27017,11211) else \
+                       "medium" if port in (21,3306,5432,8888) else "low"
+                open_ports.append({"port":port,"service":service,"risk":risk})
                 if port in (23,445,3389,5900,6379,9200,27017,11211,2375,4848,7001):
                     self._add("Open Ports Detected",f"Port {port} ({service}) open on {ip}",
                         f"{service} on port {port} should not be publicly accessible.",severity="High")
@@ -591,7 +617,6 @@ class VAPTScanner:
             else:
                 tech["Email Provider"] = mx_records[0] if mx_records else "Unknown"
 
-        # Payment processors
         payment_sigs = {"Stripe":["stripe.com","stripe.js"],"PayPal":["paypal.com","paypaljs"],
                         "Braintree":["braintree","braintreepayments"],"Square":["squareup.com"]}
         payments = [n for n,s in payment_sigs.items() if any(x in body for x in s)]
@@ -610,6 +635,48 @@ class VAPTScanner:
                 f"{len(emails)} email(s): {', '.join(emails[:5])}",
                 "Email addresses in page source can be harvested for phishing and spam.")
         self.intel["emails"] = emails
+
+    def recon_contacts(self):
+        """Harvest phone numbers, social media links, and contact info from the main page."""
+        r = self._main()
+        if not r:
+            self.intel["contacts"] = {}
+            return
+        text = r.text
+        # Phone numbers (international + local patterns)
+        phones = list(set(re.findall(r'(?:\+?\d[\d\s\-\(\)]{7,}\d)', text)))
+        phones = [p.strip() for p in phones if len(re.sub(r'\D','',p)) >= 7][:20]
+
+        # Social media
+        social_patterns = {
+            "Twitter/X":   r'(?:twitter\.com|x\.com)/([A-Za-z0-9_]{1,50})',
+            "LinkedIn":    r'linkedin\.com/(?:in|company)/([A-Za-z0-9\-]{1,80})',
+            "Facebook":    r'facebook\.com/([A-Za-z0-9.\-]{1,80})',
+            "Instagram":   r'instagram\.com/([A-Za-z0-9._]{1,50})',
+            "GitHub":      r'github\.com/([A-Za-z0-9\-]{1,80})',
+            "YouTube":     r'youtube\.com/(?:c/|channel/|user/)?([A-Za-z0-9\-_]{1,80})',
+        }
+        social = {}
+        for platform, pattern in social_patterns.items():
+            matches = list(set(re.findall(pattern, text, re.I)))
+            if matches:
+                social[platform] = matches[:3]
+
+        # POC / contact form URLs
+        soup = BeautifulSoup(text, "html.parser")
+        contact_links = []
+        for a in soup.find_all("a", href=True):
+            href = a.get("href","").lower()
+            label = a.get_text(strip=True).lower()
+            if any(k in href or k in label for k in ["contact","support","team","about","poc","reach"]):
+                full = a["href"] if a["href"].startswith("http") else f"https://{self.domain}{a['href']}"
+                contact_links.append({"label": a.get_text(strip=True)[:60], "url": full})
+
+        self.intel["contacts"] = {
+            "phones": phones,
+            "social": social,
+            "contact_pages": contact_links[:10],
+        }
 
     def recon_source_comments(self):
         r = self._main()
@@ -646,7 +713,7 @@ class VAPTScanner:
         certs = []
         try:
             r = requests.get(f"https://crt.sh/?q=%.{self.domain}&output=json",
-                             timeout=10, headers={"User-Agent":"VAPT-Scanner/2.0"})
+                             timeout=10, headers={"User-Agent":"VAPT-Scanner/3.0"})
             if r.status_code == 200:
                 data = r.json()
                 seen = set()
@@ -668,7 +735,6 @@ class VAPTScanner:
                 "Wildcard certificates in public CT logs — monitor for unexpected issuance.")
 
     def recon_waf_detection(self):
-        """Advanced WAF/firewall detection via probe responses."""
         waf_info = {"detected":False,"product":"None"}
         payloads = ["?q=<script>alert(1)</script>","?id=1' OR '1'='1","?file=../../../../etc/passwd"]
         for p in payloads:
@@ -687,6 +753,61 @@ class VAPTScanner:
                         waf_info["product"] = "Unknown WAF"
                     break
         self.intel["waf"] = waf_info
+
+    def recon_extractable_files(self):
+        """Check for files that may be downloaded/extracted — sensitive docs, data files, configs."""
+        targets = [
+            ("/.env","Environment file","Critical"),
+            ("/.env.local","Local env","Critical"),
+            ("/.env.production","Prod env","Critical"),
+            ("/.git/config","Git config","High"),
+            ("/.git/HEAD","Git HEAD","High"),
+            ("/config.php","PHP config","High"),
+            ("/wp-config.php","WP config","High"),
+            ("/wp-config.php.bak","WP config backup","High"),
+            ("/.htaccess","Apache config","Medium"),
+            ("/server-status","Apache status","Medium"),
+            ("/phpinfo.php","PHP info","Medium"),
+            ("/info.php","PHP info","Medium"),
+            ("/adminer.php","Adminer","High"),
+            ("/phpmyadmin/","phpMyAdmin","High"),
+            ("/database.sql","SQL dump","Critical"),
+            ("/backup.sql","SQL backup","Critical"),
+            ("/web.config","IIS config","High"),
+            ("/crossdomain.xml","Flash crossdomain","Low"),
+            ("/.DS_Store","macOS DS_Store","Low"),
+            ("/npm-debug.log","npm log","Low"),
+            ("/yarn-error.log","Yarn log","Low"),
+            ("/composer.json","Composer manifest","Low"),
+            ("/package.json","NPM manifest","Low"),
+            ("/.travis.yml","CI config","Medium"),
+            ("/Dockerfile","Dockerfile","Medium"),
+            ("/docker-compose.yml","Docker Compose","Medium"),
+            ("/sitemap.xml","Sitemap","Info"),
+            ("/robots.txt","Robots.txt","Info"),
+            ("/security.txt","Security.txt","Info"),
+            ("/.well-known/security.txt","Security.txt","Info"),
+        ]
+        found_files = []
+        for path, label, risk in targets:
+            url = self.target + path
+            r = safe_get(url, timeout=5)
+            if r and r.status_code == 200 and len(r.text.strip()) > 5:
+                extractable = True
+                if risk in ("Critical","High"):
+                    if any(kw in r.text.lower() for kw in ["db_","database","password","secret","api_key","php","[core]","ref:","from","env","port"]):
+                        self._add("Exposed Sensitive Files", f"{label} at {url}",
+                            f"'{path}' publicly accessible — may expose credentials or configuration.",
+                            [url], severity=risk)
+                found_files.append({
+                    "path": path,
+                    "label": label,
+                    "url": url,
+                    "risk": risk,
+                    "size": len(r.content),
+                    "content_type": r.headers.get("Content-Type",""),
+                })
+        self.intel["extractable_files"] = found_files
 
     # ══════════════════════════════════════════════════════════════════════
     #   VULNERABILITY CHECKS (40+)
@@ -793,8 +914,8 @@ class VAPTScanner:
         body_lower = r.text.lower()
         if "no-store" not in cc and "no-cache" not in cc and "private" not in cc:
             if any(k in body_lower for k in ["password","logout","account","dashboard","session","profile"]):
-                self._add("Cache Control Issues",f"Cache-Control: {r.headers.get('Cache-Control','not set')}",
-                    "Sensitive page without no-store/no-cache — may be cached, leaking session data.")
+                self._add("Cache Control Issues",f"Cache-Control: '{cc}' on potentially sensitive page.",
+                    "Sensitive page responses may be cached — private data at risk.")
 
     def check_directory_listing(self):
         for path in ["/images/","/uploads/","/assets/","/static/","/files/","/backup/","/data/","/tmp/"]:
@@ -804,29 +925,6 @@ class VAPTScanner:
                 self._add("Directory Listing Enabled",f"Directory listing at {url}",
                     "Web server lists directory contents — internal file structures exposed.",[url])
                 break
-
-    def check_sensitive_files(self):
-        targets = [
-            ("/.env","Environment file"),("/.env.local","Local env"),("/.env.production","Prod env"),
-            ("/.git/config","Git config"),("/.git/HEAD","Git HEAD"),
-            ("/config.php","PHP config"),("/wp-config.php","WP config"),
-            ("/wp-config.php.bak","WP config backup"),("/.htaccess","Apache config"),
-            ("/server-status","Apache status"),("/phpinfo.php","PHP info"),
-            ("/info.php","PHP info"),("/adminer.php","Adminer"),("/phpmyadmin/","phpMyAdmin"),
-            ("/database.sql","SQL dump"),("/backup.sql","SQL backup"),
-            ("/web.config","IIS config"),("/crossdomain.xml","Flash crossdomain"),
-            ("/.DS_Store","macOS DS_Store"),("/npm-debug.log","npm log"),
-            ("/yarn-error.log","Yarn log"),("/composer.json","Composer manifest"),
-            ("/package.json","NPM manifest"),("/.travis.yml","CI config"),
-            ("/Dockerfile","Dockerfile"),("/docker-compose.yml","Docker Compose"),
-        ]
-        for path, label in targets:
-            url = self.target + path
-            r = safe_get(url,timeout=5)
-            if r and r.status_code == 200 and len(r.text.strip()) > 5:
-                if any(kw in r.text.lower() for kw in ["db_","database","password","secret","api_key","php","[core]","ref:","from","env","port"]):
-                    self._add("Exposed Sensitive Files",f"{label} at {url}",
-                        f"'{path}' publicly accessible — may expose credentials or configuration.",[url],severity="High")
 
     def check_admin_panels(self):
         admin_paths = [
@@ -1112,7 +1210,7 @@ class VAPTScanner:
     #   MASTER RUN
     # ══════════════════════════════════════════════════════════════════════
 
-    def run(self):
+    def run(self, progress_cb=None):
         all_steps = [
             ("DNS records",           self.recon_dns),
             ("IP geolocation",        self.recon_ip_info),
@@ -1123,9 +1221,11 @@ class VAPTScanner:
             ("Technology stack",      self.recon_technologies),
             ("WAF detection",         self.recon_waf_detection),
             ("Email harvesting",      self.recon_email_harvest),
+            ("Contact & social OSINT",self.recon_contacts),
             ("Source code comments",  self.recon_source_comments),
             ("Linked pages",          self.recon_linked_pages),
             ("CT log query",          self.recon_ct_logs),
+            ("Extractable files",     self.recon_extractable_files),
             ("Security headers",      self.check_security_headers),
             ("CORS policy",           self.check_cors),
             ("CORS preflight",        self.check_cors_preflight),
@@ -1136,7 +1236,6 @@ class VAPTScanner:
             ("Clickjacking",          self.check_clickjacking),
             ("Mixed content",         self.check_mixed_content),
             ("Directory listing",     self.check_directory_listing),
-            ("Sensitive files",       self.check_sensitive_files),
             ("Admin panels",          self.check_admin_panels),
             ("Backup files",          self.check_backup_files),
             ("API endpoints",         self.check_api_exposure),
@@ -1156,11 +1255,14 @@ class VAPTScanner:
             ("DNS/email security",    self.check_dns_email),
         ]
 
-        print(Fore.CYAN + f"\n  [*] Target : {self.target}")
-        print(Fore.CYAN +  f"  [*] Domain : {self.domain}\n")
+        total = len(all_steps)
+        print(Fore.RED + f"\n  [*] Target : {self.target}")
+        print(Fore.RED +  f"  [*] Domain : {self.domain}\n")
 
-        for label, fn in tqdm(all_steps, desc="  Scanning",
-                              bar_format="{l_bar}"+Fore.GREEN+"{bar}"+Style.RESET_ALL+"{r_bar}"):
+        for idx, (label, fn) in enumerate(tqdm(all_steps, desc="  Scanning",
+                              bar_format="{l_bar}"+Fore.RED+"{bar}"+Style.RESET_ALL+"{r_bar}")):
+            if progress_cb:
+                progress_cb(label, idx + 1, total)
             try:
                 fn()
             except Exception:
@@ -1170,384 +1272,39 @@ class VAPTScanner:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  CHART GENERATION
+#  JSON EXPORT
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generate_charts(findings, intel, out_dir):
-    os.makedirs(out_dir,exist_ok=True)
-    charts = {}
-
-    counts = {s:0 for s in SEVERITY_ORDER}
+def save_results_json(target, domain, findings, intel, score_data, out_dir):
+    os.makedirs(out_dir, exist_ok=True)
+    counts = {s: 0 for s in SEVERITY_ORDER}
     for f in findings:
         counts[f["severity"]] += 1
-    nz = {k:v for k,v in counts.items() if v > 0}
 
-    # Bar chart
-    if nz:
-        fig,ax = plt.subplots(figsize=(9,4.5))
-        bars = ax.bar(list(nz.keys()),list(nz.values()),
-                      color=[SEVERITY_COLORS[k] for k in nz],edgecolor="white",linewidth=1,width=0.5)
-        ax.set_title("Vulnerability Count by Severity",fontsize=14,fontweight="bold",pad=14)
-        ax.set_xlabel("Severity",fontsize=11); ax.set_ylabel("Count",fontsize=11)
-        ax.set_facecolor("#F5F5F5"); fig.patch.set_facecolor("#FFFFFF")
-        ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
-        ax.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
-        for bar,val in zip(bars,nz.values()):
-            ax.text(bar.get_x()+bar.get_width()/2,bar.get_height()+0.05,str(val),
-                    ha="center",va="bottom",fontweight="bold",fontsize=12)
-        plt.tight_layout()
-        p = os.path.join(out_dir,"bar_severity.png")
-        plt.savefig(p,dpi=150,bbox_inches="tight"); plt.close()
-        charts["bar_severity"] = p
-
-    # Pie chart
-    if nz:
-        fig,ax = plt.subplots(figsize=(6,5))
-        ax.pie(list(nz.values()),labels=list(nz.keys()),
-               colors=[SEVERITY_COLORS[k] for k in nz],
-               autopct="%1.0f%%",startangle=140,
-               wedgeprops=dict(edgecolor="white",linewidth=1.5),
-               textprops=dict(fontsize=10))
-        ax.set_title("Severity Distribution",fontsize=13,fontweight="bold",pad=12)
-        plt.tight_layout()
-        p = os.path.join(out_dir,"pie_severity.png")
-        plt.savefig(p,dpi=150,bbox_inches="tight"); plt.close()
-        charts["pie_severity"] = p
-
-    # OWASP breakdown
+    # Build OWASP breakdown
     owasp_counts = {}
     for f in findings:
         key = f"{f['owasp_id']} {f['owasp_name']}"
-        owasp_counts[key] = owasp_counts.get(key,0) + 1
-    if owasp_counts:
-        sorted_owasp = dict(sorted(owasp_counts.items(),key=lambda x:-x[1]))
-        labels = [k[:35] for k in sorted_owasp.keys()]
-        vals   = list(sorted_owasp.values())
-        fig,ax = plt.subplots(figsize=(11,max(4,len(labels)*0.55+1.5)))
-        colors = plt.cm.RdYlGn_r(np.linspace(0.1,0.9,len(labels)))
-        bars = ax.barh(labels,vals,color=colors,edgecolor="white")
-        ax.set_title("Findings by OWASP Top 10 Category",fontsize=13,fontweight="bold",pad=12)
-        ax.set_xlabel("Count",fontsize=11); ax.invert_yaxis()
-        ax.set_facecolor("#F5F5F5"); fig.patch.set_facecolor("#FFFFFF")
-        ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
-        ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
-        for bar,val in zip(bars,vals):
-            ax.text(bar.get_width()+0.05,bar.get_y()+bar.get_height()/2,str(val),va="center",fontweight="bold")
-        plt.tight_layout()
-        p = os.path.join(out_dir,"owasp_breakdown.png")
-        plt.savefig(p,dpi=150,bbox_inches="tight"); plt.close()
-        charts["owasp"] = p
+        owasp_counts[key] = owasp_counts.get(key, 0) + 1
 
-    # Open ports chart
-    ports = intel.get("ports",[])
-    if ports:
-        port_labels = [f"{p['port']}\n{p['service']}" for p in ports]
-        fig,ax = plt.subplots(figsize=(max(6,len(ports)*0.9),3.5))
-        ax.bar(port_labels,[1]*len(ports),color="#FF6B6B",edgecolor="white")
-        ax.set_title("Open Ports Detected",fontsize=13,fontweight="bold")
-        ax.set_yticks([]); ax.set_facecolor("#F5F5F5"); fig.patch.set_facecolor("#FFFFFF")
-        ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
-        plt.tight_layout()
-        p = os.path.join(out_dir,"ports.png")
-        plt.savefig(p,dpi=150,bbox_inches="tight"); plt.close()
-        charts["ports"] = p
+    payload = {
+        "meta": {
+            "tool": "Ash's VAPT & OSINT Tool v3.0",
+            "target": target,
+            "domain": domain,
+            "scan_date": datetime.datetime.utcnow().isoformat() + "Z",
+            "total_findings": len(findings),
+        },
+        "score": score_data,
+        "severity_counts": counts,
+        "owasp_breakdown": owasp_counts,
+        "findings": sorted(findings, key=lambda x: SEVERITY_ORDER.index(x["severity"])),
+        "intel": intel,
+    }
 
-    return charts
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  DOCX REPORT
-# ─────────────────────────────────────────────────────────────────────────────
-
-def styled_p(doc,text,bold=False,size=11,color=None,align=None,space_after=6,italic=False):
-    p = doc.add_paragraph()
-    p.paragraph_format.space_after = Pt(space_after)
-    p.paragraph_format.space_before = Pt(0)
-    if align: p.alignment = align
-    run = p.add_run(text)
-    run.bold=bold; run.italic=italic; run.font.size=Pt(size)
-    if color:
-        r,g,b = hex_rgb(color)
-        run.font.color.rgb = RGBColor(r,g,b)
-    return p
-
-def section_heading(doc,text,level=1):
-    colors = {1:"1F3864",2:"2E75B6",3:"404040"}
-    sizes  = {1:15,2:12,3:10}
-    p = doc.add_paragraph()
-    p.paragraph_format.space_before = Pt(14 if level==1 else 8)
-    p.paragraph_format.space_after  = Pt(4)
-    run = p.add_run(text); run.bold=True; run.font.size=Pt(sizes[level])
-    r,g,b = hex_rgb(colors[level]); run.font.color.rgb=RGBColor(r,g,b)
-    if level <= 2:
-        pPr = p._p.get_or_add_pPr()
-        pBdr = OxmlElement("w:pBdr")
-        bot = OxmlElement("w:bottom")
-        bot.set(qn("w:val"),"single"); bot.set(qn("w:sz"),"6")
-        bot.set(qn("w:space"),"1"); bot.set(qn("w:color"),colors[level])
-        pBdr.append(bot); pPr.append(pBdr)
-    return p
-
-def severity_badge(para,sev):
-    fill=SEVERITY_FILL.get(sev,"888888"); txt=SEVERITY_TEXT.get(sev,"FFFFFF")
-    run = para.add_run(f"  {sev.upper()}  ")
-    run.bold=True; run.font.size=Pt(9)
-    r,g,b=hex_rgb(txt); run.font.color.rgb=RGBColor(r,g,b)
-    rPr=run._r.get_or_add_rPr()
-    shd=OxmlElement("w:shd")
-    shd.set(qn("w:val"),"clear"); shd.set(qn("w:color"),"auto"); shd.set(qn("w:fill"),fill)
-    rPr.append(shd)
-
-def add_kv_table(doc,rows_data):
-    tbl=doc.add_table(rows=0,cols=2); tbl.style="Table Grid"
-    for key,val in rows_data:
-        row=tbl.add_row().cells
-        set_cell_bg(row[0],"EBF3FB")
-        k=row[0].paragraphs[0].add_run(str(key)); k.bold=True; k.font.size=Pt(9)
-        v=row[1].paragraphs[0].add_run(str(val)[:300]); v.font.size=Pt(9)
-    doc.add_paragraph().paragraph_format.space_after=Pt(4)
-
-def build_report(target,domain,findings,intel,charts,out_path):
-    doc = Document()
-    for section in doc.sections:
-        section.top_margin=Cm(2); section.bottom_margin=Cm(2)
-        section.left_margin=Cm(2.5); section.right_margin=Cm(2.5)
-
-    counts = {s:0 for s in SEVERITY_ORDER}
-    for f in findings: counts[f["severity"]] += 1
-    sorted_findings = sorted(findings,key=lambda x:SEVERITY_ORDER.index(x["severity"]))
-
-    # ── COVER PAGE ────────────────────────────────────────────────────────────
-    p = doc.add_paragraph()
-    p.alignment=WD_ALIGN_PARAGRAPH.CENTER; p.paragraph_format.space_before=Pt(50)
-    run=p.add_run("VAPT ANALYTICAL REPORT"); run.bold=True; run.font.size=Pt(30)
-    run.font.color.rgb=RGBColor(0x1F,0x38,0x64)
-    styled_p(doc,"Vulnerability Assessment + OSINT Intelligence — Advanced Edition v2.0",
-             size=13,color="2E75B6",align=WD_ALIGN_PARAGRAPH.CENTER)
-    styled_p(doc,f"Target: {target}",bold=True,size=12,align=WD_ALIGN_PARAGRAPH.CENTER)
-    styled_p(doc,f"Assessment Date: {datetime.date.today().strftime('%d %B %Y')}",
-             size=11,align=WD_ALIGN_PARAGRAPH.CENTER,space_after=30)
-    tbl=doc.add_table(rows=2,cols=5); tbl.alignment=WD_TABLE_ALIGNMENT.CENTER
-    for i,sev in enumerate(SEVERITY_ORDER):
-        set_cell_bg(tbl.rows[0].cells[i],SEVERITY_FILL[sev])
-        hp=tbl.rows[0].cells[i].paragraphs[0]; hp.alignment=WD_ALIGN_PARAGRAPH.CENTER
-        hr=hp.add_run(sev); hr.bold=True; hr.font.size=Pt(9)
-        r2,g2,b2=hex_rgb(SEVERITY_TEXT[sev]); hr.font.color.rgb=RGBColor(r2,g2,b2)
-        vp=tbl.rows[1].cells[i].paragraphs[0]; vp.alignment=WD_ALIGN_PARAGRAPH.CENTER
-        vr=vp.add_run(str(counts[sev])); vr.bold=True; vr.font.size=Pt(16)
-    doc.add_page_break()
-
-    # ── SECTION 1: TARGET INTELLIGENCE ───────────────────────────────────────
-    section_heading(doc,"1. Target Intelligence & OSINT")
-
-    section_heading(doc,"  1.1  IP Address & Hosting Information",level=2)
-    ip_rows = []
-    for info in intel.get("ip_info",[]):
-        ip_rows += [("IP Address",info.get("query",info.get("ip","N/A"))),
-                    ("Country/Region/City",f"{info.get('country','N/A')} / {info.get('regionName','N/A')} / {info.get('city','N/A')}"),
-                    ("ISP",info.get("isp","N/A")),("Organisation",info.get("org","N/A")),("ASN",info.get("as","N/A"))]
-    add_kv_table(doc,ip_rows or [("IP Info","Could not retrieve")])
-
-    section_heading(doc,"  1.2  WHOIS Registration Data",level=2)
-    w=intel.get("whois",{})
-    add_kv_table(doc,[
-        ("Registrar",w.get("registrar","N/A")),("Registered",w.get("creation_date","N/A")),
-        ("Expires",w.get("expiry_date","N/A")),("Last Updated",w.get("updated_date","N/A")),
-        ("Organisation",w.get("org","N/A")),("Country",w.get("country","N/A")),
-        ("Status",w.get("status","N/A")),("Name Servers",", ".join(w.get("name_servers",[])) or "N/A"),
-        ("WHOIS Emails",", ".join(w.get("emails",[])) or "None found"),
-    ])
-
-    section_heading(doc,"  1.3  SSL/TLS Certificate Details",level=2)
-    ssl_d=intel.get("ssl",{})
-    subj=ssl_d.get("subject",{}); issuer=ssl_d.get("issuer",{})
-    add_kv_table(doc,[
-        ("Subject CN",subj.get("CN","N/A")),("Subject Org",subj.get("O","N/A")),
-        ("Issuer",f"{issuer.get('CN','N/A')} / {issuer.get('O','N/A')}"),
-        ("Protocol",ssl_d.get("protocol","N/A")),("Cipher Suite",str(ssl_d.get("cipher","N/A"))),
-        ("Valid Until",ssl_d.get("not_after","N/A")),("Days Until Expiry",str(ssl_d.get("days_until_expiry","N/A"))),
-        ("SHA-256 Fingerprint",ssl_d.get("sha256_fp","N/A")[:60]),
-        ("SANs","; ".join(ssl_d.get("san",[]))[:200] or "None"),
-    ])
-
-    section_heading(doc,"  1.4  Technology Stack Fingerprint",level=2)
-    tech=intel.get("technologies",{})
-    tech_rows=[(k,str(v) if not isinstance(v,list) else ", ".join(v)) for k,v in tech.items()]
-    add_kv_table(doc,tech_rows or [("Technology","Could not fingerprint")])
-
-    waf=intel.get("waf",{})
-    if waf:
-        section_heading(doc,"  1.5  WAF / Firewall Detection",level=2)
-        add_kv_table(doc,[("WAF Detected","Yes" if waf.get("detected") else "No"),
-                         ("WAF Product",waf.get("product","None"))])
-
-    section_heading(doc,"  1.6  DNS Records",level=2)
-    dns_d=intel.get("dns",{})
-    dns_rows=[]
-    for rtype in ["A","AAAA","MX","NS","TXT","CNAME","SOA","CAA"]:
-        vals=dns_d.get(rtype,[])
-        if vals: dns_rows.append((rtype,"\n".join(str(v)[:100] for v in vals[:5])))
-    for ip,ptr in list(dns_d.get("PTR_MAP",{}).items())[:3]:
-        dns_rows.append((f"PTR ({ip})",ptr))
-    add_kv_table(doc,dns_rows or [("DNS","No records resolved")])
-
-    section_heading(doc,"  1.7  Discovered Subdomains",level=2)
-    subs=intel.get("subdomains",[])
-    if subs:
-        tbl2=doc.add_table(rows=1,cols=2); tbl2.style="Table Grid"
-        for cell,txt in zip(tbl2.rows[0].cells,["Subdomain","IP Address(es)"]):
-            set_cell_bg(cell,"1F3864")
-            r2=cell.paragraphs[0].add_run(txt); r2.bold=True; r2.font.size=Pt(9)
-            r2.font.color.rgb=RGBColor(255,255,255)
-        for s in subs[:30]:
-            row=tbl2.add_row().cells
-            row[0].paragraphs[0].add_run(s["subdomain"]).font.size=Pt(9)
-            row[1].paragraphs[0].add_run(", ".join(s["ips"])).font.size=Pt(9)
-    else:
-        styled_p(doc,"No active subdomains discovered.",size=10,italic=True)
-    doc.add_paragraph()
-
-    section_heading(doc,"  1.8  Open Ports",level=2)
-    ports=intel.get("ports",[])
-    if ports:
-        tbl3=doc.add_table(rows=1,cols=2); tbl3.style="Table Grid"
-        for cell,txt in zip(tbl3.rows[0].cells,["Port","Service"]):
-            set_cell_bg(cell,"1F3864")
-            r3=cell.paragraphs[0].add_run(txt); r3.bold=True; r3.font.size=Pt(9)
-            r3.font.color.rgb=RGBColor(255,255,255)
-        for p in ports:
-            row=tbl3.add_row().cells
-            row[0].paragraphs[0].add_run(str(p["port"])).font.size=Pt(9)
-            row[1].paragraphs[0].add_run(p["service"]).font.size=Pt(9)
-    else:
-        styled_p(doc,"No unusual open ports detected.",size=10,italic=True)
-    doc.add_paragraph()
-
-    section_heading(doc,"  1.9  Certificate Transparency Logs (crt.sh)",level=2)
-    ct=intel.get("ct_logs",[])
-    styled_p(doc,f"{len(ct)} certificate entry(ies) found in CT logs.",size=10)
-    if ct:
-        tbl4=doc.add_table(rows=1,cols=2); tbl4.style="Table Grid"
-        for cell,txt in zip(tbl4.rows[0].cells,["Domain / SAN","Date Logged"]):
-            set_cell_bg(cell,"1F3864")
-            r4=cell.paragraphs[0].add_run(txt); r4.bold=True; r4.font.size=Pt(9)
-            r4.font.color.rgb=RGBColor(255,255,255)
-        for c in ct[:20]:
-            row=tbl4.add_row().cells
-            row[0].paragraphs[0].add_run(c["domain"][:80]).font.size=Pt(9)
-            row[1].paragraphs[0].add_run(c["logged"]).font.size=Pt(9)
-    doc.add_paragraph()
-
-    emails=intel.get("emails",[])
-    if emails:
-        section_heading(doc,"  1.10  Harvested Email Addresses",level=2)
-        for e in emails[:20]:
-            bp=doc.add_paragraph(style="List Bullet"); bp.add_run(e).font.size=Pt(10)
-
-    comments=intel.get("source_comments",[])
-    if comments:
-        section_heading(doc,"  1.11  Sensitive HTML Comments",level=2)
-        for c in comments[:5]:
-            bp=doc.add_paragraph(style="List Bullet"); bp.add_run(c[:200]).font.size=Pt(9)
-
-    doc.add_page_break()
-
-    # ── SECTION 2: EXECUTIVE SUMMARY ─────────────────────────────────────────
-    section_heading(doc,"2. Executive Summary")
-    total=len(findings); crit=counts["Critical"]; high=counts["High"]
-    med=counts["Medium"]; low=counts["Low"]
-    summary=(f"An automated VAPT assessment of {target} identified {total} security finding(s): "
-             f"{crit} Critical, {high} High, {med} Medium, and {low} Low severity. ")
-    if crit > 0: summary += "CRITICAL issues require immediate emergency remediation. "
-    if high > 0: summary += "High severity findings should be addressed within 7 days. "
-    if med > 0:  summary += "Medium issues should be resolved within 30 days. "
-    summary += ("Assessment covered security headers, SSL/TLS, cookie security, CORS, injection testing, "
-                "authentication controls, open port scanning, DNS/email security, subdomain enumeration, "
-                "WAF detection, CT log analysis, and full OSINT intelligence gathering.")
-    styled_p(doc,summary,size=11,space_after=8)
-
-    # ── SECTION 3: CHARTS ─────────────────────────────────────────────────────
-    doc.add_page_break()
-    section_heading(doc,"3. Vulnerability Distribution & Analysis")
-    for key in ["bar_severity","pie_severity"]:
-        if key in charts and os.path.exists(charts[key]):
-            doc.add_picture(charts[key],width=Inches(5.2))
-            doc.paragraphs[-1].alignment=WD_ALIGN_PARAGRAPH.CENTER
-    if "owasp" in charts and os.path.exists(charts["owasp"]):
-        section_heading(doc,"   OWASP Top 10 Breakdown",level=2)
-        doc.add_picture(charts["owasp"],width=Inches(6.0))
-        doc.paragraphs[-1].alignment=WD_ALIGN_PARAGRAPH.CENTER
-    if "ports" in charts and os.path.exists(charts["ports"]):
-        section_heading(doc,"   Open Ports",level=2)
-        doc.add_picture(charts["ports"],width=Inches(5.0))
-        doc.paragraphs[-1].alignment=WD_ALIGN_PARAGRAPH.CENTER
-
-    # ── SECTION 4: SUMMARY TABLE ──────────────────────────────────────────────
-    doc.add_page_break()
-    section_heading(doc,"4. Summary of Vulnerabilities")
-    tbl5=doc.add_table(rows=1,cols=4); tbl5.style="Table Grid"
-    for cell,txt in zip(tbl5.rows[0].cells,["ID","Vulnerability","Severity","OWASP"]):
-        set_cell_bg(cell,"1F3864"); p5=cell.paragraphs[0]; p5.alignment=WD_ALIGN_PARAGRAPH.CENTER
-        r5=p5.add_run(txt); r5.bold=True; r5.font.size=Pt(9); r5.font.color.rgb=RGBColor(255,255,255)
-    for i,f in enumerate(sorted_findings):
-        row=tbl5.add_row().cells; fill="F2F2F2" if i%2 else "FFFFFF"
-        for cell in row: set_cell_bg(cell,fill)
-        row[0].paragraphs[0].add_run(f["id"]).font.size=Pt(9)
-        row[1].paragraphs[0].add_run(f["name"]).font.size=Pt(9)
-        sp=row[2].paragraphs[0]; sp.alignment=WD_ALIGN_PARAGRAPH.CENTER
-        set_cell_bg(row[2],SEVERITY_FILL[f["severity"]])
-        sr=sp.add_run(f["severity"]); sr.bold=True; sr.font.size=Pt(9)
-        r6,g6,b6=hex_rgb(SEVERITY_TEXT[f["severity"]]); sr.font.color.rgb=RGBColor(r6,g6,b6)
-        row[3].paragraphs[0].add_run(f"{f['owasp_id']} – {f['owasp_name']}").font.size=Pt(9)
-    doc.add_paragraph()
-
-    # ── SECTION 5: DETAILED FINDINGS ─────────────────────────────────────────
-    doc.add_page_break()
-    section_heading(doc,"5. Detailed Vulnerability Findings")
-    for f in sorted_findings:
-        section_heading(doc,f"  {f['id']}  {f['name']}",level=2)
-        bp=doc.add_paragraph(); bp.paragraph_format.space_after=Pt(3)
-        bp.add_run("Severity: ").font.size=Pt(10); severity_badge(bp,f["severity"])
-        op=doc.add_paragraph(); op.paragraph_format.space_after=Pt(8)
-        or2=op.add_run(f"OWASP {f['owasp_id']} – {f['owasp_name']}"); or2.italic=True; or2.font.size=Pt(10)
-        r7,g7,b7=hex_rgb("2E75B6"); or2.font.color.rgb=RGBColor(r7,g7,b7)
-        for label,content in [("Summary",f["detail"]),("Evidence",f["evidence"]),("Remediation",f["remedy"])]:
-            lp=doc.add_paragraph(); lp.paragraph_format.space_after=Pt(2); lp.paragraph_format.space_before=Pt(4)
-            lr=lp.add_run(label+":"); lr.bold=True; lr.font.size=Pt(10)
-            r8,g8,b8=hex_rgb("1F3864"); lr.font.color.rgb=RGBColor(r8,g8,b8)
-            body=doc.add_paragraph(); body.paragraph_format.space_after=Pt(4); body.paragraph_format.left_indent=Pt(14)
-            body.add_run(content).font.size=Pt(10)
-        up=doc.add_paragraph(); up.paragraph_format.left_indent=Pt(14); up.paragraph_format.space_after=Pt(14)
-        ur=up.add_run("Affected URL(s): "+", ".join(f["urls"])); ur.font.size=Pt(9)
-        r9,g9,b9=hex_rgb("0000CC"); ur.font.color.rgb=RGBColor(r9,g9,b9)
-
-    # ── SECTION 6: REMEDIATION ROADMAP ───────────────────────────────────────
-    doc.add_page_break()
-    section_heading(doc,"6. Prioritised Remediation Roadmap")
-    priority_desc={"Critical":"Address immediately — within 24 hours","High":"Address urgently — within 7 days",
-                   "Medium":"Address in next sprint — within 30 days","Low":"Schedule for next quarter","Info":"Informational"}
-    for sev in SEVERITY_ORDER:
-        sev_f=[f for f in findings if f["severity"]==sev]
-        if not sev_f: continue
-        section_heading(doc,f"  {sev}  —  {priority_desc[sev]}",level=2)
-        for f in sev_f:
-            bp=doc.add_paragraph(style="List Bullet"); bp.paragraph_format.space_after=Pt(3)
-            br=bp.add_run(f"{f['name']}: "); br.bold=True; br.font.size=Pt(10)
-            bp.add_run(f["remedy"]).font.size=Pt(10)
-
-    # ── SECTION 7: APPENDIX ───────────────────────────────────────────────────
-    doc.add_page_break()
-    section_heading(doc,"7. Appendix — Internal Links Discovered")
-    for link in intel.get("internal_links",[])[:30]:
-        bp=doc.add_paragraph(style="List Bullet"); bp.add_run(link[:120]).font.size=Pt(9)
-
-    # Footer
-    for section in doc.sections:
-        fp=section.footer.paragraphs[0]; fp.alignment=WD_ALIGN_PARAGRAPH.CENTER
-        fp.add_run(f"VAPT Analytical Report v2.0  |  {domain}  |  {datetime.date.today().strftime('%d %B %Y')}  |  CONFIDENTIAL"
-                  ).font.size=Pt(8)
-
-    doc.save(out_path)
+    out_path = os.path.join(out_dir, "results.json")
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, default=str)
     return out_path
 
 
@@ -1555,42 +1312,44 @@ def build_report(target,domain,findings,intel,charts,out_path):
 #  CONSOLE SUMMARY
 # ─────────────────────────────────────────────────────────────────────────────
 
-def print_summary(findings,intel):
+def print_summary(findings, intel, score_data):
     COLOR={"Critical":Fore.RED,"High":Fore.LIGHTYELLOW_EX,"Medium":Fore.YELLOW,"Low":Fore.WHITE,"Info":Fore.CYAN}
-    print(Fore.CYAN+"\n"+"═"*65)
-    print(Fore.CYAN+"  OSINT INTELLIGENCE SUMMARY")
-    print(Fore.CYAN+"═"*65)
+    print(Fore.RED+"\n"+"═"*65)
+    print(Fore.RED+"  OSINT INTELLIGENCE SUMMARY")
+    print(Fore.RED+"═"*65)
     for ip_info in intel.get("ip_info",[]):
-        print(f"  {Fore.GREEN}IP{Style.RESET_ALL}          {ip_info.get('query',ip_info.get('ip','?'))}")
-        print(f"  {Fore.GREEN}Location{Style.RESET_ALL}    {ip_info.get('city','?')}, {ip_info.get('regionName','?')}, {ip_info.get('country','?')}")
-        print(f"  {Fore.GREEN}ISP/ASN{Style.RESET_ALL}     {ip_info.get('isp','?')} | {ip_info.get('as','?')}")
+        print(f"  {Fore.YELLOW}IP{Style.RESET_ALL}          {ip_info.get('query',ip_info.get('ip','?'))}")
+        print(f"  {Fore.YELLOW}Location{Style.RESET_ALL}    {ip_info.get('city','?')}, {ip_info.get('regionName','?')}, {ip_info.get('country','?')}")
+        print(f"  {Fore.YELLOW}ISP/ASN{Style.RESET_ALL}     {ip_info.get('isp','?')} | {ip_info.get('as','?')}")
     tech=intel.get("technologies",{})
     for key in ["CMS","WAF","Server","JS Frameworks","CDN","Email Provider"]:
         if tech.get(key):
-            print(f"  {Fore.GREEN}{key:<12}{Style.RESET_ALL}  {tech[key]}")
+            print(f"  {Fore.YELLOW}{key:<12}{Style.RESET_ALL}  {tech[key]}")
     subs=intel.get("subdomains",[])
-    print(f"  {Fore.GREEN}Subdomains{Style.RESET_ALL}   {len(subs)} discovered")
+    print(f"  {Fore.YELLOW}Subdomains{Style.RESET_ALL}   {len(subs)} discovered")
     ports=intel.get("ports",[])
     if ports:
         port_str=", ".join([f"{p['port']}/{p['service']}" for p in ports])
-        print(f"  {Fore.GREEN}Open Ports{Style.RESET_ALL}   {port_str}")
+        print(f"  {Fore.YELLOW}Open Ports{Style.RESET_ALL}   {port_str}")
     ssl_d=intel.get("ssl",{})
     if ssl_d.get("days_until_expiry") is not None:
         days=ssl_d["days_until_expiry"]
         col=Fore.RED if days<30 else Fore.GREEN
-        print(f"  {Fore.GREEN}SSL Expiry{Style.RESET_ALL}   {col}{days} days{Style.RESET_ALL}")
+        print(f"  {Fore.YELLOW}SSL Expiry{Style.RESET_ALL}   {col}{days} days{Style.RESET_ALL}")
     emails=intel.get("emails",[])
     if emails:
-        print(f"  {Fore.GREEN}Emails{Style.RESET_ALL}       {', '.join(emails[:3])}")
+        print(f"  {Fore.YELLOW}Emails{Style.RESET_ALL}       {', '.join(emails[:3])}")
     ct=intel.get("ct_logs",[])
-    print(f"  {Fore.GREEN}CT Log Entries{Style.RESET_ALL} {len(ct)}")
-    print(Fore.CYAN+"\n"+"═"*65)
-    print(Fore.CYAN+f"  VULNERABILITY FINDINGS ({len(findings)} total)")
-    print(Fore.CYAN+"═"*65)
+    print(f"  {Fore.YELLOW}CT Log Entries{Style.RESET_ALL} {len(ct)}")
+    print(Fore.RED+"\n"+"═"*65)
+    print(Fore.RED+f"  SECURITY SCORE: {score_data['score']}/100  Grade: {score_data['grade']}")
+    print(Fore.RED+"═"*65)
+    print(Fore.RED+f"  VULNERABILITY FINDINGS ({len(findings)} total)")
+    print(Fore.RED+"═"*65)
     for f in sorted(findings,key=lambda x:SEVERITY_ORDER.index(x["severity"])):
         c=COLOR.get(f["severity"],Fore.WHITE)
         print(f"  {c}[{f['severity']:<8}]{Style.RESET_ALL}  {f['id']}  {f['name']}")
-    print(Fore.CYAN+"─"*65)
+    print(Fore.RED+"─"*65)
     counts={s:0 for s in SEVERITY_ORDER}
     for f in findings: counts[f["severity"]] += 1
     for sev in SEVERITY_ORDER:
@@ -1599,36 +1358,140 @@ def print_summary(findings,intel):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  DASHBOARD SERVER  (with /api/scan + /api/status)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def run_scan_thread(target_url, port):
+    """Called in a background thread. Runs the full scan and saves results."""
+    global SCAN_STATE
+    try:
+        target = normalise_url(target_url)
+        domain = get_domain(target)
+
+        SCAN_STATE["status"]  = "scanning"
+        SCAN_STATE["target"]  = target
+        SCAN_STATE["step"]    = "Initialising…"
+        SCAN_STATE["progress"] = 0
+        SCAN_STATE["error"]   = ""
+
+        def progress_cb(label, current, total):
+            SCAN_STATE["step"]     = label
+            SCAN_STATE["current"]  = current
+            SCAN_STATE["total"]    = total
+            SCAN_STATE["progress"] = int((current / total) * 100)
+
+        scanner = VAPTScanner(target)
+        findings, intel = scanner.run(progress_cb=progress_cb)
+
+        score_data = calculate_security_score(findings)
+        print_summary(findings, intel, score_data)
+
+        out_dir = f"vapt_report_{domain}_{datetime.date.today().isoformat()}"
+        results_path = save_results_json(target, domain, findings, intel, score_data, out_dir)
+
+        SCAN_STATE["status"]       = "done"
+        SCAN_STATE["progress"]     = 100
+        SCAN_STATE["step"]         = "Scan complete!"
+        SCAN_STATE["results_path"] = results_path
+
+    except Exception as e:
+        SCAN_STATE["status"] = "error"
+        SCAN_STATE["error"]  = str(e)
+        print(Fore.RED + f"[!] Scan error: {e}")
+
+
+def launch_server(port=8765):
+    if not FLASK_AVAILABLE:
+        print(Fore.RED + "[!] Flask not installed. Run: pip install flask")
+        return
+
+    import logging
+    logging.getLogger("werkzeug").setLevel(logging.ERROR)
+
+    dashboard_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard", "dist")
+    app = Flask(__name__, static_folder=dashboard_dir)
+
+    @app.route("/")
+    def index():
+        return send_from_directory(dashboard_dir, "index.html")
+
+    # ── Trigger a scan ────────────────────────────────────────────────────────
+    @app.route("/api/scan", methods=["POST"])
+    def api_scan():
+        global SCAN_STATE
+        data = flask_request.get_json(force=True)
+        url  = (data.get("url") or "").strip()
+        if not url:
+            return jsonify({"error": "No URL provided"}), 400
+        if SCAN_STATE["status"] == "scanning":
+            return jsonify({"error": "Scan already in progress"}), 409
+        # Reset state
+        SCAN_STATE = {
+            "status": "scanning", "target": url, "step": "Starting…",
+            "progress": 0, "total": 0, "current": 0,
+            "results_path": None, "error": "",
+        }
+        threading.Thread(target=run_scan_thread, args=(url, port), daemon=True).start()
+        return jsonify({"ok": True})
+
+    # ── Poll progress ─────────────────────────────────────────────────────────
+    @app.route("/api/status")
+    def api_status():
+        return jsonify({
+            "status":   SCAN_STATE["status"],
+            "target":   SCAN_STATE["target"],
+            "step":     SCAN_STATE["step"],
+            "progress": SCAN_STATE["progress"],
+            "current":  SCAN_STATE["current"],
+            "total":    SCAN_STATE["total"],
+            "error":    SCAN_STATE["error"],
+        })
+
+    # ── Fetch results ─────────────────────────────────────────────────────────
+    @app.route("/api/results")
+    def api_results():
+        rp = SCAN_STATE.get("results_path")
+        if not rp or not os.path.exists(rp):
+            return jsonify({"error": "No results available yet"}), 404
+        with open(rp, encoding="utf-8") as f:
+            return jsonify(json.load(f))
+
+    def open_browser():
+        time.sleep(1.2)
+        webbrowser.open(f"http://localhost:{port}")
+
+    threading.Thread(target=open_browser, daemon=True).start()
+
+    print(Fore.RED + f"\n  ╔══════════════════════════════════════════════════╗")
+    print(Fore.RED + f"  ║  http://localhost:{port}  -- enter URL to scan     ║")
+    print(Fore.RED + f"  ║  Press Ctrl+C to stop the server                  ║")
+    print(Fore.RED + f"  ╚══════════════════════════════════════════════════╝\n")
+
+    app.run(host="127.0.0.1", port=port, debug=False, use_reloader=False, threaded=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
     banner()
-    if len(sys.argv) < 2:
-        print(Fore.RED+"  Usage: python vapt_scanner.py <target_url>")
-        print(Fore.RED+"  Example: python vapt_scanner.py https://example.com\n")
-        sys.exit(1)
+    port = 8765
+    if len(sys.argv) >= 3:
+        try:
+            port = int(sys.argv[2])
+        except ValueError:
+            pass
 
-    target = sys.argv[1].strip()
-    domain = get_domain(normalise_url(target))
+    # If a URL is passed as argument, pre-queue it
+    if len(sys.argv) >= 2:
+        url = sys.argv[1].strip()
+        print(Fore.YELLOW + f"  [*] Pre-queuing scan for: {url}")
+        threading.Thread(target=run_scan_thread, args=(url, port), daemon=True).start()
+    else:
+        print(Fore.YELLOW + "  [*] No URL given — open the dashboard to enter one.")
 
-    scanner = VAPTScanner(target)
-    findings, intel = scanner.run()
-
-    print_summary(findings, intel)
-
-    out_dir = f"vapt_report_{domain}_{datetime.date.today().isoformat()}"
-    os.makedirs(out_dir, exist_ok=True)
-
-    print(Fore.CYAN + "[*] Generating charts …")
-    charts = generate_charts(findings, intel, out_dir)
-
-    report_path = os.path.join(out_dir, f"VAPT_Report_{domain}.docx")
-    print(Fore.CYAN + "[*] Building DOCX report …")
-    build_report(normalise_url(target), domain, findings, intel, charts, report_path)
-
-    print(Fore.GREEN + f"\n✅  Report saved  →  {report_path}")
-    print(Fore.GREEN + f"    Charts saved   →  {out_dir}/\n")
+    launch_server(port=port)
 
 
 if __name__ == "__main__":
