@@ -373,7 +373,7 @@
 
   <!-- Connection Check Banner -->
   <div id="conn-banner">
-    ⚠️ BACKEND DISCONNECTED — Execute [python vapt_scanner.py] or launch start.bat
+    ⚠️ BACKEND DISCONNECTED — Run <code>python vapt_scanner.py</code> on your local machine (port 8765) to process scans.
   </div>
 
   <div class="app-frame">
@@ -525,7 +525,8 @@
   <!-- SCRIPT LOGIC -->
   <script>
     // Robust Base URL helper for localhost server connection
-    const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:8765' : '';
+    const isLocalBackend = window.location.origin.includes(':8765');
+    const API_BASE = isLocalBackend ? '' : 'http://127.0.0.1:8765';
 
     const btnScan = document.getElementById('btn-scan');
     const btnAbort = document.getElementById('btn-abort');
@@ -615,7 +616,7 @@
         showView('view-scan');
         startPolling();
       } catch (err) {
-        showError('CONNECTION REFUSED. ENSURE PYTHON SERVER IS RUNNING.');
+        showError('LOCAL BACKEND NOT RESPONDING — Run python vapt_scanner.py on port 8765');
         btnScan.disabled = false;
         setMode('STANDBY');
       }
