@@ -3,516 +3,345 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VAPT & OSINT Drone Tactical Console</title>
+  <title>Ash's VAPT & OSINT Security Workstation v3.0</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
-    /* ======================================================== RETRO CRT COMPUTER & DRONE HUD STYLES */
+    /* ======================================================== CLASSIC LIGHT VINTAGE WORKSTATION STYLES */
     :root {
-      --bg: #090c0a;
-      --panel: #111613;
-      --panel-header: #18201a;
-      --border: #223526;
-      --border-bright: #00ff66;
+      --bg: #ecefe6;
+      --panel: #ffffff;
+      --panel-border: #999999;
+      --header-bg: #d4d8cc;
+      --title-bar: #2b3a4a;
       
-      --text: #d4e8d8;
-      --text-dim: #7a9c80;
-      --text-bright: #00ff66;
+      --text: #222222;
+      --text-muted: #555555;
       
-      --primary: #00ff66;
-      --amber: #ffb000;
-      --red: #ff3344;
-      --cyan: #00e5ff;
+      --accent: #0055aa;
+      --btn-bg: #e0e4d8;
+      --btn-border: #777777;
       
-      --critical: #ff3344;
-      --high: #ff7700;
-      --medium: #ffb000;
-      --low: #00ff66;
-      --info: #00e5ff;
+      --critical: #cc0000;
+      --high: #d96600;
+      --medium: #cc9900;
+      --low: #28a745;
+      --info: #0088cc;
     }
 
-    * { margin:0; padding:0; box-sizing:border-box; }
-    html { scroll-behavior: smooth; background: var(--bg); }
-
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       background-color: var(--bg);
       color: var(--text);
-      font-family: Consolas, 'Courier New', Monaco, monospace;
-      min-height: 100vh;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       font-size: 13px;
-      line-height: 1.5;
-      padding: 12px;
-      position: relative;
+      line-height: 1.4;
+      padding: 15px;
     }
 
-    /* Subtle CRT Scanline overlay */
-    body::before {
-      content: " ";
-      display: block;
-      position: fixed;
-      top: 0; left: 0; bottom: 0; right: 0;
-      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
-      z-index: 9999;
-      background-size: 100% 3px, 6px 100%;
-      pointer-events: none;
-      opacity: 0.6;
-    }
-
-    /* Container Box */
-    .app-frame {
-      max-width: 1400px;
+    .main-window {
+      max-width: 1250px;
       margin: 0 auto;
-      border: 2px solid var(--border-bright);
-      box-shadow: 0 0 15px rgba(0, 255, 102, 0.15), inset 0 0 15px rgba(0, 255, 102, 0.05);
-      background: var(--bg);
-      padding: 16px;
+      background: var(--panel);
+      border: 2px solid var(--panel-border);
+      box-shadow: 4px 4px 0px #888888;
     }
 
-    /* Header & Telemetry Bar */
-    header {
-      border-bottom: 2px solid var(--border-bright);
-      padding-bottom: 12px;
-      margin-bottom: 16px;
+    .window-title-bar {
+      background: var(--title-bar);
+      color: #ffffff;
+      padding: 6px 12px;
+      font-weight: bold;
+      font-size: 14px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      flex-wrap: wrap;
-      gap: 10px;
+      letter-spacing: 0.5px;
     }
 
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .brand-icon {
-      font-size: 24px;
-      color: var(--primary);
-      text-shadow: 0 0 8px var(--primary);
-    }
-
-    .brand-title {
-      font-size: 1.4rem;
-      font-weight: bold;
-      color: var(--primary);
-      letter-spacing: 2px;
-      text-shadow: 0 0 5px rgba(0, 255, 102, 0.5);
-    }
-
-    .brand-sub {
-      font-size: 0.75rem;
-      color: var(--text-dim);
-      letter-spacing: 1px;
-    }
-
-    .hud-status {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      font-size: 0.8rem;
-    }
-
-    .hud-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
-      border: 1px solid var(--border-bright);
-      background: rgba(0, 255, 102, 0.05);
-      color: var(--primary);
+    .status-pill {
+      font-size: 11px;
+      padding: 2px 8px;
+      background: #ffffff;
+      color: #2b3a4a;
+      border-radius: 3px;
       font-weight: bold;
     }
 
-    .hud-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--primary);
-      box-shadow: 0 0 8px var(--primary);
-      animation: pulse 1.5s infinite;
-    }
+    .app-body { padding: 15px; }
 
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-
-    /* Tactical Drone Control Panel (Buttons) */
-    .drone-control-panel {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      padding: 16px;
-      margin-bottom: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .panel-label {
-      font-size: 0.85rem;
-      color: var(--amber);
+    /* Banner warning */
+    #conn-banner {
+      display: none;
+      background: #fff3cd;
+      border: 1px solid #ffeba8;
+      color: #856404;
+      padding: 8px 12px;
+      margin-bottom: 12px;
       font-weight: bold;
-      letter-spacing: 1px;
+    }
+
+    /* Control Panel Section */
+    .control-box {
+      background: #f4f6f0;
+      border: 1px solid #cccccc;
+      padding: 12px;
+      margin-bottom: 15px;
+    }
+
+    .box-title {
+      font-weight: bold;
+      color: #444444;
+      margin-bottom: 8px;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+
+    .input-group {
       display: flex;
-      align-items: center;
       gap: 8px;
-    }
-
-    .input-row {
-      display: flex;
-      gap: 10px;
       flex-wrap: wrap;
     }
 
     .url-input {
       flex: 1;
-      min-width: 280px;
-      background: #000;
-      border: 1px solid var(--primary);
-      color: var(--primary);
-      padding: 10px 14px;
-      font-family: inherit;
-      font-size: 1rem;
-      outline: none;
-      box-shadow: inset 0 0 6px rgba(0,255,102,0.2);
+      min-width: 250px;
+      padding: 8px 10px;
+      border: 1px solid #888888;
+      font-size: 13px;
+      background: #ffffff;
+      color: #000000;
     }
 
-    .url-input:focus {
-      border-color: #fff;
-      box-shadow: 0 0 10px rgba(0,255,102,0.5);
-    }
-
-    /* Tactical Operating Drone Buttons */
-    .drone-btn {
-      padding: 10px 20px;
-      font-family: inherit;
-      font-size: 0.9rem;
+    /* Old-school solid buttons */
+    .classic-btn {
+      padding: 8px 16px;
+      font-size: 12px;
       font-weight: bold;
-      letter-spacing: 1.5px;
       cursor: pointer;
-      border: 2px solid;
-      background: #0d120e;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      transition: all 0.15s ease;
-      text-transform: uppercase;
-      user-select: none;
+      border: 1px solid var(--btn-border);
+      background: linear-gradient(to bottom, #ffffff, #e0e4d8);
+      color: #222222;
+      box-shadow: 1px 1px 0px #777777;
     }
 
-    /* SCAN BUTTON */
-    .btn-scan {
-      border-color: var(--primary);
-      color: var(--primary);
-      box-shadow: 0 0 10px rgba(0, 255, 102, 0.2);
-    }
-    .btn-scan:hover:not(:disabled) {
-      background: var(--primary);
-      color: #000;
-      box-shadow: 0 0 20px rgba(0, 255, 102, 0.7);
+    .classic-btn:active:not(:disabled) {
+      box-shadow: none;
+      transform: translate(1px, 1px);
     }
 
-    /* ABORT BUTTON */
+    .btn-engage {
+      background: linear-gradient(to bottom, #e6ffe6, #b3ffb3);
+      border-color: #28a745;
+      color: #005500;
+    }
+
     .btn-abort {
-      border-color: var(--red);
-      color: var(--red);
-      box-shadow: 0 0 10px rgba(255, 51, 68, 0.2);
-    }
-    .btn-abort:hover:not(:disabled) {
-      background: var(--red);
-      color: #fff;
-      box-shadow: 0 0 20px rgba(255, 51, 68, 0.7);
+      background: linear-gradient(to bottom, #ffe6e6, #ffb3b3);
+      border-color: #dc3545;
+      color: #880000;
     }
 
-    /* STANDBY BUTTON */
     .btn-standby {
-      border-color: var(--amber);
-      color: var(--amber);
-      box-shadow: 0 0 10px rgba(255, 176, 0, 0.2);
-    }
-    .btn-standby:hover:not(:disabled) {
-      background: var(--amber);
-      color: #000;
-      box-shadow: 0 0 20px rgba(255, 176, 0, 0.7);
+      background: linear-gradient(to bottom, #fff9e6, #ffe699);
+      border-color: #ffc107;
+      color: #664d00;
     }
 
-    .drone-btn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-      box-shadow: none !important;
-    }
+    .classic-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    /* Error Display */
-    .error-msg {
-      color: var(--red);
-      border: 1px solid var(--red);
-      background: rgba(255, 51, 68, 0.1);
-      padding: 8px 12px;
+    .error-box {
+      color: #cc0000;
+      background: #ffe6e6;
+      border: 1px solid #ff9999;
+      padding: 6px 10px;
+      margin-top: 8px;
       display: none;
-      font-size: 0.85rem;
+      font-weight: bold;
     }
 
     /* Views */
     .view { display: none; }
     .view.active { display: block; }
 
-    /* Scan Terminal Execution Log */
-    .terminal-window {
-      background: #000;
-      border: 1px solid var(--border);
-      padding: 14px;
-      min-height: 250px;
-      max-height: 350px;
+    /* Console Terminal Log */
+    .console-log {
+      background: #ffffff;
+      border: 1px solid #999999;
+      padding: 10px;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 12px;
+      height: 220px;
       overflow-y: auto;
-      margin-top: 12px;
-      font-size: 0.85rem;
+      color: #333333;
     }
 
-    .log-line {
-      margin-bottom: 4px;
-      color: var(--text-dim);
-    }
-    .log-line.active { color: var(--primary); font-weight: bold; }
-    .log-line.done { color: var(--text); }
-    .log-line.err { color: var(--red); }
+    .log-line { margin-bottom: 2px; }
+    .log-line.active { color: #0055aa; font-weight: bold; }
 
     /* Progress bar */
-    .progress-track {
+    .progress-bar-bg {
       width: 100%;
-      height: 12px;
-      background: #111;
-      border: 1px solid var(--border);
-      margin: 10px 0;
-      position: relative;
+      height: 16px;
+      background: #e0e4d8;
+      border: 1px solid #888888;
+      margin: 8px 0;
     }
 
-    .progress-fill {
+    .progress-bar-fill {
       height: 100%;
-      background: var(--primary);
+      background: var(--accent);
       width: 0%;
-      transition: width 0.3s ease;
-      box-shadow: 0 0 8px var(--primary);
+      transition: width 0.2s ease;
     }
 
-    /* Grid & Cards */
-    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 16px; }
-    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 16px; }
-    .grid-5 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+    /* Results layout */
+    .grid-5 { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-bottom: 15px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 12px; margin-bottom: 15px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-bottom: 15px; }
 
-    .retro-card {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      padding: 14px;
-      position: relative;
+    .card {
+      background: #ffffff;
+      border: 1px solid #bbbbbb;
+      padding: 10px;
     }
 
-    .retro-card-header {
-      font-size: 0.85rem;
+    .card-title {
       font-weight: bold;
-      color: var(--primary);
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 6px;
-      margin-bottom: 10px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      text-transform: uppercase;
-      letter-spacing: 1px;
+      font-size: 12px;
+      background: var(--header-bg);
+      padding: 4px 8px;
+      margin: -10px -10px 8px -10px;
+      border-bottom: 1px solid #bbbbbb;
+      color: #333333;
     }
 
-    .stat-card {
-      background: #0d120e;
-      border: 1px solid var(--border);
-      padding: 12px;
+    .stat-box {
+      background: #f8f9fa;
+      border: 1px solid #dddddd;
+      padding: 8px;
       text-align: center;
     }
+    .stat-val { font-size: 20px; font-weight: bold; margin-top: 2px; }
 
-    .stat-num {
-      font-size: 1.6rem;
-      font-weight: bold;
-      margin-top: 4px;
-    }
+    /* Table styles */
+    table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+    th { background: #e8ece0; text-align: left; padding: 6px 8px; border: 1px solid #cccccc; font-size: 11px; font-weight: bold; }
+    td { padding: 6px 8px; border: 1px solid #dddddd; font-size: 12px; }
 
-    /* Badges */
+    .kv-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dotted #cccccc; }
+    .kv-k { color: #666666; }
+    .kv-v { font-weight: bold; color: #111111; word-break: break-all; }
+
     .badge {
-      display: inline-block;
-      padding: 2px 6px;
-      font-size: 0.7rem;
+      padding: 1px 5px;
+      font-size: 10px;
       font-weight: bold;
-      text-transform: uppercase;
-      border: 1px solid;
+      border-radius: 2px;
+      color: #ffffff;
     }
-    .badge-critical { color: var(--critical); border-color: var(--critical); background: rgba(255,51,68,0.1); }
-    .badge-high { color: var(--high); border-color: var(--high); background: rgba(255,119,0,0.1); }
-    .badge-medium { color: var(--medium); border-color: var(--medium); background: rgba(255,176,0,0.1); }
-    .badge-low { color: var(--low); border-color: var(--low); background: rgba(0,255,102,0.1); }
-    .badge-info { color: var(--info); border-color: var(--info); background: rgba(0,229,255,0.1); }
-
-    /* Tables */
-    table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 8px; border-bottom: 1px solid var(--primary); color: var(--primary); font-size: 0.75rem; }
-    td { padding: 8px; border-bottom: 1px solid #1a241c; color: var(--text); font-size: 0.85rem; }
-    tr:hover td { background: rgba(0, 255, 102, 0.03); }
-
-    /* Key-Value Lists */
-    .kv-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed #1a241c; }
-    .kv-key { color: var(--text-dim); }
-    .kv-val { color: var(--text-bright); font-weight: bold; word-break: break-all; }
-
-    /* Connection Banner */
-    #conn-banner {
-      display: none;
-      background: var(--red);
-      color: #fff;
-      padding: 8px 14px;
-      margin-bottom: 12px;
-      font-weight: bold;
-      text-align: center;
-    }
+    .badge-critical { background: var(--critical); }
+    .badge-high { background: var(--high); }
+    .badge-medium { background: var(--medium); }
+    .badge-low { background: var(--low); }
+    .badge-info { background: var(--info); }
   </style>
 </head>
 <body>
 
-  <!-- Connection Check Banner -->
-  <div id="conn-banner">
-    ⚠️ BACKEND DISCONNECTED — Run <code>python vapt_scanner.py</code> on your local machine (port 8765) to process scans.
-  </div>
-
-  <div class="app-frame">
-    <!-- Header -->
-    <header>
-      <div class="brand">
-        <span class="brand-icon">🛡️</span>
-        <div>
-          <div class="brand-title">VAPT & OSINT DRONE CONSOLE</div>
-          <div class="brand-sub">TACTICAL RECONNAISSANCE & VULNERABILITY PLATFORM v3.0</div>
-        </div>
-      </div>
-      <div class="hud-status">
-        <div class="hud-badge"><span class="hud-dot"></span> TELEMETRY ONLINE</div>
-        <div class="hud-badge" id="hud-mode">MODE: STANDBY</div>
-      </div>
-    </header>
-
-    <!-- Tactical Operating Drone Control Panel -->
-    <div class="drone-control-panel">
-      <div class="panel-label">⚡ DRONE MISSION CONTROL & VECTOR INPUT</div>
-      <div class="input-row">
-        <input type="text" id="target-url" class="url-input" placeholder="ENTER TARGET VECTOR (e.g. example.com)" />
-        <button id="btn-scan" class="drone-btn btn-scan">🚀 [ ENGAGE SCAN ]</button>
-        <button id="btn-abort" class="drone-btn btn-abort">⛔ [ ABORT SCAN ]</button>
-        <button id="btn-standby" class="drone-btn btn-standby">⏸️ [ STANDBY ]</button>
-      </div>
-      <div id="error-box" class="error-msg"></div>
+  <div class="main-window">
+    <div class="window-title-bar">
+      <span>🛡️ Ash's VAPT & OSINT Security Workstation v3.0</span>
+      <span class="status-pill" id="hud-mode">STATUS: IDLE</span>
     </div>
 
-    <!-- VIEW 1: STANDBY / HOME -->
-    <div id="view-home" class="view active">
-      <div class="retro-card">
-        <div class="retro-card-header">OPERATIONAL INSTRUCTIONS</div>
-        <p style="color: var(--text-dim);">Enter a target URL or IP in the vector input above and click <strong style="color:var(--primary);">[ ENGAGE SCAN ]</strong> to begin automated multi-vector vulnerability assessment and OSINT reconnaissance.</p>
-        <div style="margin-top:12px; display:flex; gap:20px; flex-wrap:wrap; font-size:0.8rem; color:var(--text-dim);">
-          <span>► 14 OSINT Recon Modules</span>
-          <span>► 28 Vulnerability Engines</span>
-          <span>► OWASP Top 10 Mapping</span>
-          <span>► Autonomous Port & SSL Analyzer</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- VIEW 2: ACTIVE SCANNING LOG -->
-    <div id="view-scan" class="view">
-      <div class="retro-card">
-        <div class="retro-card-header">
-          <span>SCANNING IN PROGRESS — TARGET: <span id="scan-target-label" style="color:#fff;"></span></span>
-          <span id="progress-pct" style="color:var(--primary);">0%</span>
-        </div>
-        <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
-        <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-dim); margin-bottom:8px;">
-          <span id="current-step">INITIALIZING SCAN SEQUENCES...</span>
-          <span id="progress-step-num">0 / 42 MODULES</span>
-        </div>
-        <div class="terminal-window" id="scan-log"></div>
-      </div>
-    </div>
-
-    <!-- VIEW 3: SCAN RESULTS DASHBOARD -->
-    <div id="view-results" class="view">
-      <!-- Summary Bar -->
-      <div class="grid-5">
-        <div class="stat-card"><div style="color:var(--critical); font-weight:bold;">CRITICAL</div><div id="sc-critical" class="stat-num" style="color:var(--critical);">0</div></div>
-        <div class="stat-card"><div style="color:var(--high); font-weight:bold;">HIGH</div><div id="sc-high" class="stat-num" style="color:var(--high);">0</div></div>
-        <div class="stat-card"><div style="color:var(--medium); font-weight:bold;">MEDIUM</div><div id="sc-medium" class="stat-num" style="color:var(--medium);">0</div></div>
-        <div class="stat-card"><div style="color:var(--low); font-weight:bold;">LOW</div><div id="sc-low" class="stat-num" style="color:var(--low);">0</div></div>
-        <div class="stat-card"><div style="color:var(--info); font-weight:bold;">INFO</div><div id="sc-info" class="stat-num" style="color:var(--info);">0</div></div>
+    <div class="app-body">
+      <!-- Connection warning -->
+      <div id="conn-banner">
+        ⚠️ LOCAL BACKEND NOT DETECTED — Open terminal and run <code>python vapt_scanner.py</code>
       </div>
 
-      <!-- Charts & Score Grid -->
-      <div class="grid-2">
-        <div class="retro-card" style="text-align:center;">
-          <div class="retro-card-header">SECURITY SCORE & GRADE</div>
-          <div style="font-size:3rem; font-weight:bold; margin:10px 0;" id="scoreNum">--</div>
-          <div style="font-size:1.2rem; font-weight:bold;" id="scoreGrade">CLASS --</div>
-          <div style="font-size:0.8rem; color:var(--text-dim); margin-top:4px;" id="scoreVerdict">--</div>
+      <!-- Control Box -->
+      <div class="control-box">
+        <div class="box-title">Target Vector & Drone Operation Buttons</div>
+        <div class="input-group">
+          <input type="text" id="target-url" class="url-input" placeholder="Enter Target URL (e.g. example.com)" />
+          <button id="btn-scan" class="classic-btn btn-engage">▶ ENGAGE SCAN</button>
+          <button id="btn-abort" class="classic-btn btn-abort">⏹ ABORT SCAN</button>
+          <button id="btn-standby" class="classic-btn btn-standby">⏸ STANDBY</button>
         </div>
+        <div id="error-box" class="error-box"></div>
+      </div>
 
-        <div class="retro-card">
-          <div class="retro-card-header">SEVERITY BREAKDOWN</div>
-          <div style="height:180px; position:relative;"><canvas id="sevChart"></canvas></div>
+      <!-- HOME VIEW -->
+      <div id="view-home" class="view active">
+        <div class="card">
+          <div class="card-title">System Instructions</div>
+          <p style="color:#444444; margin-bottom:8px;">Enter a web domain or URL in the input field above and click <strong>▶ ENGAGE SCAN</strong> to initiate vulnerability probes and OSINT reconnaissance.</p>
+          <div style="background:#f0f4e8; border:1px solid #c0c8b0; padding:8px 12px; font-size:12px;">
+            <strong>📌 Contact owner for full details:</strong> <a href="https://ashrafulaashique.in" target="_blank" style="color:#0055aa; font-weight:bold; text-decoration:underline;">ashrafulaashique.in</a>
+          </div>
         </div>
       </div>
 
-      <!-- Intel Grid -->
-      <div class="grid-3">
-        <div class="retro-card">
-          <div class="retro-card-header">IP & GEOLOCATION</div>
-          <div id="ip-info-list"></div>
-        </div>
-        <div class="retro-card">
-          <div class="retro-card-header">WHOIS REGISTRY</div>
-          <div id="whois-list"></div>
-        </div>
-        <div class="retro-card">
-          <div class="retro-card-header">SSL/TLS CERTIFICATE</div>
-          <div id="ssl-list"></div>
+      <!-- SCANNING VIEW -->
+      <div id="view-scan" class="view">
+        <div class="card">
+          <div class="card-title">Scanning Target: <span id="scan-target-label" style="color:#0055aa;"></span></div>
+          <div class="progress-bar-bg"><div id="progress-fill" class="progress-bar-fill"></div></div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px; color:#555555; font-size:11px;">
+            <span id="current-step">Starting scan threads...</span>
+            <span id="progress-pct">0%</span>
+          </div>
+          <div class="console-log" id="scan-log"></div>
         </div>
       </div>
 
-      <!-- Ports & Tech -->
-      <div class="grid-2">
-        <div class="retro-card">
-          <div class="retro-card-header">OPEN PORTS [<span id="ports-count">0</span>]</div>
-          <div id="port-grid"></div>
+      <!-- RESULTS VIEW -->
+      <div id="view-results" class="view">
+        <!-- Severity count metrics -->
+        <div class="grid-5">
+          <div class="stat-box"><div style="color:var(--critical); font-weight:bold;">CRITICAL</div><div id="sc-critical" class="stat-val" style="color:var(--critical);">0</div></div>
+          <div class="stat-box"><div style="color:var(--high); font-weight:bold;">HIGH</div><div id="sc-high" class="stat-val" style="color:var(--high);">0</div></div>
+          <div class="stat-box"><div style="color:var(--medium); font-weight:bold;">MEDIUM</div><div id="sc-medium" class="stat-val" style="color:var(--medium);">0</div></div>
+          <div class="stat-box"><div style="color:var(--low); font-weight:bold;">LOW</div><div id="sc-low" class="stat-val" style="color:var(--low);">0</div></div>
+          <div class="stat-box"><div style="color:var(--info); font-weight:bold;">INFO</div><div id="sc-info" class="stat-val" style="color:var(--info);">0</div></div>
         </div>
-        <div class="retro-card">
-          <div class="retro-card-header">TECHNOLOGY STACK</div>
-          <div id="tech-grid"></div>
-        </div>
-      </div>
 
-      <!-- Subdomains & Emails -->
-      <div class="grid-2">
-        <div class="retro-card">
-          <div class="retro-card-header">SUBDOMAINS [<span id="subs-count">0</span>]</div>
-          <div id="sub-list" style="max-height:200px; overflow-y:auto;"></div>
+        <!-- Score & Chart -->
+        <div class="grid-2">
+          <div class="card" style="text-align:center;">
+            <div class="card-title">Security Grade & Score</div>
+            <div style="font-size:36px; font-weight:bold; margin:10px 0; color:#0055aa;" id="scoreNum">--</div>
+            <div style="font-size:16px; font-weight:bold;" id="scoreGrade">CLASS --</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Severity Chart</div>
+            <div style="height:150px; position:relative;"><canvas id="sevChart"></canvas></div>
+          </div>
         </div>
-        <div class="retro-card">
-          <div class="retro-card-header">HARVESTED EMAILS [<span id="emails-count">0</span>]</div>
-          <div id="emails-wrap"></div>
-        </div>
-      </div>
 
-      <!-- Findings Table -->
-      <div class="retro-card">
-        <div class="retro-card-header">
-          <span>VULNERABILITY ASSESSMENT REPORT [<span id="findings-count">0</span>]</span>
+        <!-- Recon details -->
+        <div class="grid-3">
+          <div class="card"><div class="card-title">IP & Geolocation</div><div id="ip-info-list"></div></div>
+          <div class="card"><div class="card-title">WHOIS Data</div><div id="whois-list"></div></div>
+          <div class="card"><div class="card-title">SSL Certificate</div><div id="ssl-list"></div></div>
         </div>
-        <div style="overflow-x:auto;">
+
+        <div class="grid-2">
+          <div class="card"><div class="card-title">Open Ports [<span id="ports-count">0</span>]</div><div id="port-grid"></div></div>
+          <div class="card"><div class="card-title">Technologies</div><div id="tech-grid"></div></div>
+        </div>
+
+        <!-- Findings -->
+        <div class="card">
+          <div class="card-title">Vulnerability Findings [<span id="findings-count">0</span>]</div>
           <table>
             <thead>
               <tr>
                 <th>ID</th>
-                <th>VULNERABILITY</th>
-                <th>SEVERITY</th>
-                <th>OWASP REF</th>
+                <th>Vulnerability</th>
+                <th>Severity</th>
+                <th>OWASP Reference</th>
               </tr>
             </thead>
             <tbody id="findings-tbody"></tbody>
@@ -522,11 +351,10 @@
     </div>
   </div>
 
-  <!-- SCRIPT LOGIC -->
+  <!-- SCRIPT -->
   <script>
-    // Robust Base URL helper for localhost server connection
-    const isLocalBackend = window.location.origin.includes(':8765');
-    const API_BASE = isLocalBackend ? '' : 'http://127.0.0.1:8765';
+    // Always connect to local Flask backend server
+    const API_BASE = window.location.origin.includes(':8765') ? '' : 'http://127.0.0.1:8765';
 
     const btnScan = document.getElementById('btn-scan');
     const btnAbort = document.getElementById('btn-abort');
@@ -540,43 +368,36 @@
     let G = {};
     let sevChartInst = null;
 
-    // Helper fetch wrapper
     async function apiFetch(endpoint, options = {}) {
-      const url = API_BASE + endpoint;
-      const res = await fetch(url, options);
-      return res;
+      return await fetch(API_BASE + endpoint, options);
     }
 
-    // Connectivity test on load
-    (async function checkConnection() {
+    // Check server status on load
+    (async function checkConn() {
       try {
-        const res = await apiFetch('/api/status');
+        const r = await apiFetch('/api/status');
         connBanner.style.display = 'none';
-        const data = await res.json();
-        if (data.status === 'scanning') {
-          setMode('SCANNING');
+        const d = await r.json();
+        if (d.status === 'scanning') {
+          hudMode.textContent = 'STATUS: SCANNING';
           showView('view-scan');
           startPolling();
-        } else if (data.status === 'done') {
-          setMode('RESULTS');
+        } else if (d.status === 'done') {
+          hudMode.textContent = 'STATUS: COMPLETE';
           loadResults();
         }
-      } catch (err) {
+      } catch(e) {
         connBanner.style.display = 'block';
       }
     })();
 
-    function setMode(mode) {
-      hudMode.textContent = `MODE: ${mode}`;
-    }
-
-    function showView(viewId) {
+    function showView(vId) {
       document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-      document.getElementById(viewId).classList.add('active');
+      document.getElementById(vId).classList.add('active');
     }
 
     function showError(msg) {
-      errorBox.textContent = '[ERR] ' + msg;
+      errorBox.textContent = msg;
       errorBox.style.display = 'block';
     }
 
@@ -584,30 +405,30 @@
       errorBox.style.display = 'none';
     }
 
-    // ⚡ 1. ENGAGE SCAN BUTTON
+    // ENGAGE BUTTON
     btnScan.addEventListener('click', startScan);
     targetInput.addEventListener('keydown', e => { if (e.key === 'Enter') startScan(); });
 
     async function startScan() {
       let url = targetInput.value.trim();
-      if (!url) { showError('TARGET VECTOR URL REQUIRED.'); return; }
+      if (!url) { showError('Please enter a target URL.'); return; }
       if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
 
       hideError();
       btnScan.disabled = true;
-      setMode('ENGAGED');
+      hudMode.textContent = 'STATUS: ENGAGED';
 
       try {
-        const res = await apiFetch('/api/scan', {
+        const r = await apiFetch('/api/scan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url })
         });
-        const json = await res.json();
-        if (!res.ok) {
-          showError(json.error || 'FAILED TO START SCAN');
+        const j = await r.json();
+        if (!r.ok) {
+          showError(j.error || 'Failed to start scan.');
           btnScan.disabled = false;
-          setMode('STANDBY');
+          hudMode.textContent = 'STATUS: IDLE';
           return;
         }
 
@@ -615,36 +436,33 @@
         document.getElementById('scan-log').innerHTML = '';
         showView('view-scan');
         startPolling();
-      } catch (err) {
-        showError('LOCAL BACKEND NOT RESPONDING — Run python vapt_scanner.py on port 8765');
+      } catch(e) {
+        showError('LOCAL BACKEND NOT RESPONDING — Make sure python vapt_scanner.py is running on port 8765');
         btnScan.disabled = false;
-        setMode('STANDBY');
+        hudMode.textContent = 'STATUS: IDLE';
       }
     }
 
-    // ⛔ 2. ABORT SCAN BUTTON
+    // ABORT BUTTON
     btnAbort.addEventListener('click', async () => {
       clearInterval(pollTimer);
-      try {
-        await apiFetch('/api/abort', { method: 'POST' });
-      } catch(e) {}
+      try { await apiFetch('/api/abort', { method: 'POST' }); } catch(e) {}
       btnScan.disabled = false;
-      setMode('ABORTED');
-      showError('SCAN SEQUENCE ABORTED BY OPERATOR.');
+      hudMode.textContent = 'STATUS: ABORTED';
+      showError('Scan sequence aborted by user.');
       showView('view-home');
     });
 
-    // ⏸️ 3. STANDBY BUTTON
+    // STANDBY BUTTON
     btnStandby.addEventListener('click', () => {
       clearInterval(pollTimer);
       btnScan.disabled = false;
       targetInput.value = '';
       hideError();
-      setMode('STANDBY');
+      hudMode.textContent = 'STATUS: IDLE';
       showView('view-home');
     });
 
-    // Polling function
     function startPolling() {
       clearInterval(pollTimer);
       pollTimer = setInterval(pollStatus, 900);
@@ -652,50 +470,48 @@
 
     async function pollStatus() {
       try {
-        const res = await apiFetch('/api/status');
-        const s = await res.json();
+        const r = await apiFetch('/api/status');
+        const s = await r.json();
 
         document.getElementById('progress-fill').style.width = s.progress + '%';
         document.getElementById('progress-pct').textContent = s.progress + '%';
-        document.getElementById('progress-step-num').textContent = `${s.current} / ${s.total} PROCESSES`;
-        document.getElementById('current-step').textContent = s.step || 'SCANNING...';
+        document.getElementById('current-step').textContent = s.step || 'Scanning...';
 
         if (s.step) {
           const logEl = document.getElementById('scan-log');
           const line = document.createElement('div');
           line.className = 'log-line active';
-          line.textContent = `[${String(s.current).padStart(2,'0')}] EXECUTING: ${s.step}`;
-          if (logEl.lastChild) logEl.lastChild.className = 'log-line done';
+          line.textContent = `[${String(s.current).padStart(2,'0')}] ${s.step}`;
+          if (logEl.lastChild) logEl.lastChild.className = 'log-line';
           logEl.appendChild(line);
           logEl.scrollTop = logEl.scrollHeight;
         }
 
         if (s.status === 'done') {
           clearInterval(pollTimer);
-          setMode('RESULTS');
+          hudMode.textContent = 'STATUS: COMPLETE';
           loadResults();
         } else if (s.status === 'error') {
           clearInterval(pollTimer);
           btnScan.disabled = false;
-          showError(s.error || 'SCAN ERROR OCCURRED');
-          setMode('STANDBY');
+          showError(s.error || 'Scan error occurred.');
+          hudMode.textContent = 'STATUS: IDLE';
         }
-      } catch (err) {}
+      } catch(e) {}
     }
 
     async function loadResults() {
       try {
-        const res = await apiFetch('/api/results');
-        G = await res.json();
+        const r = await apiFetch('/api/results');
+        G = await r.json();
         renderResults();
         showView('view-results');
         btnScan.disabled = false;
-      } catch (err) {
-        showError('FAILED TO LOAD RESULTS DATA.');
+      } catch(e) {
+        showError('Failed to load scan results.');
       }
     }
 
-    // Masking 50% data helper
     function mask(str) {
       if (!str || str === 'N/A' || str === '--') return str;
       const s = String(str);
@@ -706,7 +522,6 @@
     }
 
     function renderResults() {
-      // 1. Stats
       const c = G.severity_counts || {};
       document.getElementById('sc-critical').textContent = c.Critical || 0;
       document.getElementById('sc-high').textContent = c.High || 0;
@@ -714,95 +529,71 @@
       document.getElementById('sc-low').textContent = c.Low || 0;
       document.getElementById('sc-info').textContent = c.Info || 0;
 
-      // 2. Score
       const sc = G.score || { score: 0, grade: 'F' };
       document.getElementById('scoreNum').textContent = sc.score;
       document.getElementById('scoreGrade').textContent = `CLASS ${sc.grade}`;
 
-      // 3. Chart
       if (sevChartInst) sevChartInst.destroy();
       const ctx = document.getElementById('sevChart').getContext('2d');
       sevChartInst = new Chart(ctx, {
-        type: 'doughnut',
+        type: 'pie',
         data: {
           labels: ['Critical', 'High', 'Medium', 'Low', 'Info'],
           datasets: [{
             data: [c.Critical||0, c.High||0, c.Medium||0, c.Low||0, c.Info||0],
-            backgroundColor: ['#ff3344', '#ff7700', '#ffb000', '#00ff66', '#00e5ff'],
-            borderWidth: 1,
-            borderColor: '#090c0a'
+            backgroundColor: ['#cc0000', '#d96600', '#cc9900', '#28a745', '#0088cc']
           }]
         },
         options: {
-          plugins: { legend: { position: 'right', labels: { color: '#d4e8d8', font: { family: 'Consolas' } } } },
+          plugins: { legend: { position: 'right' } },
           responsive: true,
           maintainAspectRatio: false
         }
       });
 
-      // 4. IP Info
       const ip = (G.intel?.ip_info || [])[0] || {};
       document.getElementById('ip-info-list').innerHTML = `
-        <div class="kv-row"><span class="kv-key">IP</span><span class="kv-val">${mask(ip.query || ip.ip || 'N/A')}</span></div>
-        <div class="kv-row"><span class="kv-key">Country</span><span class="kv-val">${ip.country || 'N/A'}</span></div>
-        <div class="kv-row"><span class="kv-key">ISP</span><span class="kv-val">${ip.isp || 'N/A'}</span></div>
+        <div class="kv-row"><span class="kv-k">IP:</span><span class="kv-v">${mask(ip.query || ip.ip || 'N/A')}</span></div>
+        <div class="kv-row"><span class="kv-k">Country:</span><span class="kv-v">${ip.country || 'N/A'}</span></div>
+        <div class="kv-row"><span class="kv-k">ISP:</span><span class="kv-v">${ip.isp || 'N/A'}</span></div>
       `;
 
-      // 5. WHOIS
       const w = G.intel?.whois || {};
       document.getElementById('whois-list').innerHTML = `
-        <div class="kv-row"><span class="kv-key">Registrar</span><span class="kv-val">${w.registrar || 'N/A'}</span></div>
-        <div class="kv-row"><span class="kv-key">Created</span><span class="kv-val">${w.creation_date || 'N/A'}</span></div>
-        <div class="kv-row"><span class="kv-key">Expires</span><span class="kv-val">${w.expiry_date || 'N/A'}</span></div>
+        <div class="kv-row"><span class="kv-k">Registrar:</span><span class="kv-v">${w.registrar || 'N/A'}</span></div>
+        <div class="kv-row"><span class="kv-k">Created:</span><span class="kv-v">${w.creation_date || 'N/A'}</span></div>
+        <div class="kv-row"><span class="kv-k">Expires:</span><span class="kv-v">${w.expiry_date || 'N/A'}</span></div>
       `;
 
-      // 6. SSL
       const ssl = G.intel?.ssl || {};
       document.getElementById('ssl-list').innerHTML = `
-        <div class="kv-row"><span class="kv-key">Issuer</span><span class="kv-val">${(ssl.issuer||{}).CN || 'N/A'}</span></div>
-        <div class="kv-row"><span class="kv-key">Protocol</span><span class="kv-val">${ssl.protocol || 'N/A'}</span></div>
-        <div class="kv-row"><span class="kv-key">Days Left</span><span class="kv-val">${ssl.days_until_expiry ?? 'N/A'}</span></div>
+        <div class="kv-row"><span class="kv-k">Issuer:</span><span class="kv-v">${(ssl.issuer||{}).CN || 'N/A'}</span></div>
+        <div class="kv-row"><span class="kv-k">Protocol:</span><span class="kv-v">${ssl.protocol || 'N/A'}</span></div>
+        <div class="kv-row"><span class="kv-k">Days Left:</span><span class="kv-v">${ssl.days_until_expiry ?? 'N/A'}</span></div>
       `;
 
-      // 7. Ports
       const ports = G.intel?.ports || [];
       document.getElementById('ports-count').textContent = ports.length;
       document.getElementById('port-grid').innerHTML = ports.length
-        ? ports.map(p => `<span class="badge badge-low" style="margin:2px;">PORT ${mask(p.port)}: ${p.service}</span>`).join('')
-        : '<div style="color:var(--text-dim);">No open ports detected.</div>';
+        ? ports.map(p => `<span class="badge badge-low" style="margin:2px;">${mask(p.port)}: ${p.service}</span>`).join(' ')
+        : 'No open ports detected.';
 
-      // 8. Tech
       const tech = G.intel?.technologies || {};
       document.getElementById('tech-grid').innerHTML = Object.keys(tech).length
-        ? Object.entries(tech).map(([k,v]) => `<span class="badge badge-info" style="margin:2px;">${k}: ${Array.isArray(v)?v.join(','):v}</span>`).join('')
-        : '<div style="color:var(--text-dim);">No tech signatures detected.</div>';
+        ? Object.entries(tech).map(([k,v]) => `<span class="badge badge-info" style="margin:2px;">${k}: ${Array.isArray(v)?v.join(','):v}</span>`).join(' ')
+        : 'No technologies detected.';
 
-      // 9. Subdomains
-      const subs = G.intel?.subdomains || [];
-      document.getElementById('subs-count').textContent = subs.length;
-      document.getElementById('sub-list').innerHTML = subs.length
-        ? subs.map(s => `<div class="kv-row"><span class="kv-key">${mask(s.subdomain)}</span><span class="kv-val">${mask((s.ips||[]).join(', '))}</span></div>`).join('')
-        : '<div style="color:var(--text-dim);">No subdomains resolved.</div>';
-
-      // 10. Emails
-      const emails = G.intel?.emails || [];
-      document.getElementById('emails-count').textContent = emails.length;
-      document.getElementById('emails-wrap').innerHTML = emails.length
-        ? emails.map(e => `<span class="badge badge-medium" style="margin:2px;">${mask(e)}</span>`).join('')
-        : '<div style="color:var(--text-dim);">No emails harvested.</div>';
-
-      // 11. Findings
       const findings = G.findings || [];
       document.getElementById('findings-count').textContent = findings.length;
       const tbody = document.getElementById('findings-tbody');
       tbody.innerHTML = findings.length ? findings.map(f => `
         <tr>
           <td>${f.id}</td>
-          <td style="font-weight:bold;">${f.name}</td>
+          <td><strong>${f.name}</strong></td>
           <td><span class="badge badge-${(f.severity||'info').toLowerCase()}">${f.severity}</span></td>
           <td>${f.owasp_id} - ${f.owasp_name}</td>
         </tr>
-      `).join('') : '<tr><td colspan="4">NO VULNERABILITIES DETECTED.</td></tr>';
+      `).join('') : '<tr><td colspan="4">No vulnerabilities detected.</td></tr>';
     }
   </script>
 </body>
