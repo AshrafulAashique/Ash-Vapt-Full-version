@@ -584,20 +584,8 @@
 
       const findings = G.findings || [];
       document.getElementById('findings-count').textContent = findings.length;
-      const tbody = document.getElementById('findings-tbody');
-      
-      // Inject notice and unmask findings details
+      // Inject findings details
       let resultsHtml = "";
-      if (!isLocal) {
-          resultsHtml += `
-            <tr>
-              <td colspan="4" style="text-align: center; background-color: #ffe6e6; color: #cc0000; font-weight: bold; padding: 15px;">
-                DEMO PREVIEW: Some advanced reporting details and exports have been omitted. <br> 
-                Contact owner (ashrafulaashique.in) for the full version, detailed vulnerability exploitation paths, and PDF reports.
-              </td>
-            </tr>
-          `;
-      }
       
       resultsHtml += findings.length ? findings.map(f => `
         <tr>
