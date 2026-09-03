@@ -1412,14 +1412,11 @@ def launch_server(port=8765):
     root_dir = os.path.dirname(os.path.abspath(__file__))
     app = Flask(__name__, static_folder=root_dir)
 
-    # ── CORS helper — allow file:// and localhost origins ─────────────────────
+    # ── CORS helper — allow all origins for local file:// & localhost ─────────
     def _cors(response):
-        origin = flask_request.headers.get("Origin", "")
-        # Allow file:// (browsers send null), and any localhost origin
-        if origin in ("", "null") or origin.startswith("http://localhost") or origin.startswith("http://127.0.0.1"):
-            response.headers["Access-Control-Allow-Origin"] = origin or "null"
-            response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-            response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         return response
     app.after_request(_cors)
 
@@ -1455,6 +1452,14 @@ def launch_server(port=8765):
             "results_path": None, "error": "",
         }
         threading.Thread(target=run_scan_thread, args=(url, port), daemon=True).start()
+        return jsonify({"ok": True})
+
+    # ── Abort a scan ──────────────────────────────────────────────────────────
+    @app.route("/api/abort", methods=["POST"])
+    def api_abort():
+        global SCAN_STATE
+        SCAN_STATE["status"] = "error"
+        SCAN_STATE["error"] = "SCAN SEQUENCE ABORTED BY OPERATOR"
         return jsonify({"ok": True})
 
     # ── Poll progress ─────────────────────────────────────────────────────────
