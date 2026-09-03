@@ -257,7 +257,7 @@
     <div class="app-body">
       <!-- Connection warning -->
       <div id="conn-banner">
-        ⚠️ LOCAL BACKEND NOT DETECTED — Open terminal and run <code>python vapt_scanner.py</code>
+        ℹ️ DEMO / ONLINE PREVIEW: Backend scanning engine runs locally. Contact owner for full version & live access: <a href="https://ashrafulaashique.in" target="_blank" style="color:#0055aa; font-weight:bold; text-decoration:underline;">ashrafulaashique.in</a>
       </div>
 
       <!-- Control Box -->
@@ -437,7 +437,7 @@
         showView('view-scan');
         startPolling();
       } catch(e) {
-        showError('LOCAL BACKEND NOT RESPONDING — Make sure python vapt_scanner.py is running on port 8765');
+        showError('DEMO / ONLINE PREVIEW: Backend scanning engine runs locally on port 8765. Contact owner (ashrafulaashique.in) for full version & live access.');
         btnScan.disabled = false;
         hudMode.textContent = 'STATUS: IDLE';
       }
