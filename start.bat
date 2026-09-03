@@ -1,9 +1,6 @@
 @echo off
-color 0A
-title VAPT ^& OSINT Platform
-echo ========================================================
-echo SYSTEM INITIALIZATION...
-echo Starting Python Backend Server...
-echo ========================================================
-python vapt_scanner.py
-pause
+title VAPT Backend
+echo Starting VAPT ^& OSINT Scanner backend...
+start /B /MIN pythonw vapt_scanner.py 2>nul || start /MIN python vapt_scanner.py
+timeout /t 2 /nobreak >nul
+start "" "%~dp0index.html"

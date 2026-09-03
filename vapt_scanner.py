@@ -1408,12 +1408,35 @@ def launch_server(port=8765):
     import logging
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
-    dashboard_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard", "dist")
-    app = Flask(__name__, static_folder=dashboard_dir)
+    # Serve index.html from the project root directory
+    root_dir = os.path.dirname(os.path.abspath(__file__))
+    app = Flask(__name__, static_folder=root_dir)
+
+    # ── CORS helper — allow file:// and localhost origins ─────────────────────
+    def _cors(response):
+        origin = flask_request.headers.get("Origin", "")
+        # Allow file:// (browsers send null), and any localhost origin
+        if origin in ("", "null") or origin.startswith("http://localhost") or origin.startswith("http://127.0.0.1"):
+            response.headers["Access-Control-Allow-Origin"] = origin or "null"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        return response
+    app.after_request(_cors)
 
     @app.route("/")
     def index():
-        return send_from_directory(dashboard_dir, "index.html")
+        return send_from_directory(root_dir, "index.html")
+
+    # Also serve the standalone index.html directly
+    @app.route("/index.html")
+    def index_html():
+        return send_from_directory(root_dir, "index.html")
+
+    # Handle OPTIONS preflight for all API routes
+    @app.route("/api/<path:p>", methods=["OPTIONS"])
+    def options_handler(p):
+        resp = app.make_default_options_response()
+        return _cors(resp)
 
     # ── Trigger a scan ────────────────────────────────────────────────────────
     @app.route("/api/scan", methods=["POST"])
@@ -1456,16 +1479,11 @@ def launch_server(port=8765):
         with open(rp, encoding="utf-8") as f:
             return jsonify(json.load(f))
 
-    def open_browser():
-        time.sleep(1.2)
-        webbrowser.open(f"http://localhost:{port}")
-
-    threading.Thread(target=open_browser, daemon=True).start()
-
-    print(Fore.RED + f"\n  ╔══════════════════════════════════════════════════╗")
-    print(Fore.RED + f"  ║  http://localhost:{port}  -- enter URL to scan     ║")
-    print(Fore.RED + f"  ║  Press Ctrl+C to stop the server                  ║")
-    print(Fore.RED + f"  ╚══════════════════════════════════════════════════╝\n")
+    print(Fore.CYAN + f"\n  ╔══════════════════════════════════════════════════╗")
+    print(Fore.CYAN + f"  ║  Backend running on http://localhost:{port}         ║")
+    print(Fore.CYAN + f"  ║  Open index.html in your browser to scan          ║")
+    print(Fore.CYAN + f"  ║  Press Ctrl+C to stop the server                  ║")
+    print(Fore.CYAN + f"  ╚══════════════════════════════════════════════════╝\n")
 
     app.run(host="127.0.0.1", port=port, debug=False, use_reloader=False, threaded=True)
 

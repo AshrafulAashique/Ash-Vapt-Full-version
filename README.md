@@ -58,17 +58,17 @@ cd Ash-s-VAPT-nd-OSINT-tool
 pip install -r requirements.txt
 ```
 
-### 3. Launch the Dashboard
-```bash
-python vapt_scanner.py
-```
+### 3. Launch
 
-Or use the included launcher:
-```bash
-start.bat           # Windows
-```
+**Option A — Double-click `start.bat`** *(Recommended for Windows)*  
+This starts the Python backend silently in the background and opens `index.html` in your browser automatically.
 
-The browser opens automatically at **http://localhost:8765** — enter a target URL and click **Scan**.
+**Option B — Open `index.html` directly**  
+1. First start the backend in a terminal: `python vapt_scanner.py`  
+2. Then open `index.html` from the project root in your browser  
+3. The page auto-detects the local server — enter a target URL and click **Scan**
+
+> If the backend isn't running when you open `index.html`, a red banner will appear with instructions to run `start.bat` first.
 
 ---
 
