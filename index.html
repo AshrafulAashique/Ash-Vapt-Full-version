@@ -584,6 +584,8 @@
 
       const findings = G.findings || [];
       document.getElementById('findings-count').textContent = findings.length;
+      const tbody = document.getElementById('findings-tbody');
+      
       // Inject findings details
       let resultsHtml = "";
       
