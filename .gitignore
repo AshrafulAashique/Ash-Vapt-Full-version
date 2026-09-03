@@ -2,7 +2,9 @@ node_modules/
 dashboard/node_modules/
 vapt_report_*/
 __pycache__/
+*.pyc
 patch.py
 patch2.py
 patch_scanner.py
 deployable project/
+AeroShards.jsx
