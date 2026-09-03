@@ -353,8 +353,12 @@
 
   <!-- SCRIPT -->
   <script>
-    // Always connect to local Flask backend server
-    const API_BASE = window.location.origin.includes(':8765') ? '' : 'http://127.0.0.1:8765';
+    // Connect to the Render cloud backend if on a static host like Vercel.
+    // If we are on localhost or directly on Render, use relative paths.
+    const isLocalOrRender = window.location.hostname === '127.0.0.1' || 
+                            window.location.hostname === 'localhost' || 
+                            window.location.hostname.includes('onrender.com');
+    const API_BASE = isLocalOrRender ? '' : 'https://vapt-osint-intelligence-platform-v1.onrender.com';
 
     const btnScan = document.getElementById('btn-scan');
     const btnAbort = document.getElementById('btn-abort');
@@ -437,7 +441,7 @@
         showView('view-scan');
         startPolling();
       } catch(e) {
-        showError('DEMO / ONLINE PREVIEW: Backend scanning engine runs locally on port 8765. Contact owner (ashrafulaashique.in) for full version & live access.');
+        showError('CONNECTION FAILED: Unable to reach the backend server. The cloud server may be sleeping or down.');
         btnScan.disabled = false;
         hudMode.textContent = 'STATUS: IDLE';
       }
